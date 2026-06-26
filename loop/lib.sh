@@ -11,6 +11,13 @@ if [ -f "$SCAFFOLD_ROOT/loop.conf" ]; then
   source "$SCAFFOLD_ROOT/loop.conf"
 fi
 
+# Load engine routing (.env) HERE — early — so LOOP_TOOL is set before run-plan.sh/
+# verify.sh pick their adapter, and LOOP_ENGINE_* are available to engine.sh.
+if [ -f "$SCAFFOLD_ROOT/.env" ]; then
+  set -a; # shellcheck disable=SC1091
+  . "$SCAFFOLD_ROOT/.env"; set +a
+fi
+
 log() { printf '%s  %s\n' "$(date +%FT%T)" "$*" >&2; }
 
 require() { command -v "$1" >/dev/null 2>&1 || { log "MISSING: $1 not on PATH"; exit 127; }; }

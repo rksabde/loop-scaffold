@@ -12,11 +12,8 @@
 
 [ -n "${SCAFFOLD_ROOT:-}" ] || source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
-# Engine routing lives in .env (separate from loop.conf, which holds caps/test cmds).
-if [ -f "$SCAFFOLD_ROOT/.env" ]; then
-  set -a; # shellcheck disable=SC1091
-  . "$SCAFFOLD_ROOT/.env"; set +a
-fi
+# Engine routing (.env) is loaded by lib.sh — early, so LOOP_TOOL is set before an
+# adapter is chosen. (lib.sh is sourced above when SCAFFOLD_ROOT was unset.)
 
 # high|mid|low ; opus|sonnet|haiku aliased; anything else passed through (concrete model).
 engine_norm_tier() {
