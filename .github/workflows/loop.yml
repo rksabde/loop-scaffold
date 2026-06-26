@@ -1,0 +1,45 @@
+name: agent-loop
+# Unattended mode. Runs the fleet on a schedule and on demand.
+# Requires a secret with your Claude Code auth (e.g. ANTHROPIC_API_KEY,
+# or a Claude subscription token per your setup).
+
+on:
+  schedule:
+    - cron: "0 9 * * 1-5"      # 09:00 UTC, weekdays
+  workflow_dispatch: {}
+
+concurrency:
+  group: agent-loop
+  cancel-in-progress: false      # never run two fleets at once
+
+jobs:
+  loop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }   # full history for worktrees/diffs
+
+      - name: Install Claude Code
+        run: npm i -g @anthropic-ai/claude-code
+
+      # Install your project's toolchain here (node/python/etc.)
+      # - uses: actions/setup-node@v4
+      #   with: { node-version: 20 }
+      # - run: npm ci
+
+      - name: Run fleet
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          git config user.name  "agent-loop"
+          git config user.email "agent-loop@users.noreply.github.com"
+          chmod +x loop/*.sh
+          ./loop/triage.sh
+
+      - name: Push loop branches
+        run: git push origin --all || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: loop-logs, path: loop/logs/ }

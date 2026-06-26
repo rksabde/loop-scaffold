@@ -1,0 +1,7 @@
+wt-*/
+loop/logs/
+loop/state/
+AGENTS.override.md
+.env
+.env.*
+!.env.example
