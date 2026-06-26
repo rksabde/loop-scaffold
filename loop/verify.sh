@@ -15,18 +15,35 @@ mkdir -p loop/logs
 
 git diff "${BASE_BRANCH:-main}...loop/$slug" > "loop/logs/$slug.diff" 2>/dev/null || true
 
+# Audit IN a checkout of the branch (detached, so it coexists with the executor's
+# worktree) — acceptance commands then run against the branch's actual state, not main.
+wt="$SCAFFOLD_ROOT/../wt-verify-$slug"
+git worktree remove --force "$wt" 2>/dev/null || true
+git worktree add --detach "$wt" "loop/$slug" >/dev/null 2>&1 \
+  || { log "[verify] cannot check out loop/$slug"; exit 1; }
+
 # The 'verifier' role resolves to a protected frontier engine (engine.sh keeps it on
 # real Anthropic even when the fleet default is cheap), so the auditor never grades
 # itself with the cheap execution engine.
 read -r -d '' prompt <<PROMPT || true
-Use the verifier subagent.
+Use the verifier subagent. You are in a CHECKOUT of branch loop/$slug (this working dir).
 Plan file contents:
 $(cat "$plan")
 
-The branch diff is saved at loop/logs/$slug.diff (also reproducible via
-'git diff ${BASE_BRANCH:-main}...loop/$slug'). Run each Acceptance check
-yourself and return the JSON verdict.
+Run each \`## Acceptance\` check HERE. For scope, judge ONLY the committed diff vs
+${BASE_BRANCH:-main} (\`git diff ${BASE_BRANCH:-main}...loop/$slug\`, saved at
+$SCAFFOLD_ROOT/loop/logs/$slug.diff) — IGNORE generated/untracked files (e.g. __pycache__,
+*.pyc, build output) created by running the checks. Return the JSON verdict.
 PROMPT
 
-adapter_run verifier "$prompt" "loop/logs/$slug.verdict.json"
-cat "loop/logs/$slug.verdict.json"
+# The verifier must actually RUN the acceptance commands (not just inspect), or "trust
+# nothing" is hollow. It is read-only by tool restriction (Bash/Read/Grep/Glob — no
+# Edit/Write), and runs in an ephemeral detached worktree, so bypassPermissions lets it
+# EXECUTE checks while still being unable to modify the repo. (Codex: workspace-write
+# already allows running commands.)
+( cd "$wt" && PERMISSION_MODE=bypassPermissions CODEX_SANDBOX=workspace-write \
+    adapter_run verifier "$prompt" "$SCAFFOLD_ROOT/loop/logs/$slug.verdict.json" )
+rc=$?
+git worktree remove --force "$wt" 2>/dev/null || true
+cat "$SCAFFOLD_ROOT/loop/logs/$slug.verdict.json"
+exit $rc
