@@ -45,8 +45,12 @@ format in plans/README.md. Number plans sequentially AFTER any that already exis
 plans/. Every plan is status: draft. Write ONLY under plans/.
 PROMPT
   adapter_run planner "$prompt" "$SCAFFOLD_ROOT/loop/logs/intake-$name.json"
-  printf '%s' "$h" > "$dir/.intake.sha"
-  log "[intake] '$name' planned (marker updated)"
+  if [ "${LOOP_DRYRUN:-0}" = "1" ]; then
+    log "[intake] (dry-run) would plan '$name' — marker NOT written"
+  else
+    printf '%s' "$h" > "$dir/.intake.sha"
+    log "[intake] '$name' planned (marker updated)"
+  fi
   planned=$((planned+1))
 done
 log "[intake] done — $planned initiative(s) (re)planned"

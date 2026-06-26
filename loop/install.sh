@@ -18,10 +18,15 @@ for f in loop.conf LOOPS.md .env.example \
          .claude/settings.json \
          .claude/agents/verifier.md .claude/agents/researcher.md .claude/agents/engineer.md \
          .claude/agents/planner.md \
-         plans/000-EXAMPLE.md plans/PROGRESS.md \
-         .github/workflows/loop.yml; do
+         plans/000-EXAMPLE.md plans/PROGRESS.md; do
   copy "$f"
 done
+
+# CI workflow ships as a TEMPLATE (ci/loop.yml) so this scaffold repo isn't itself an
+# active workflow; install places it at the TARGET's .github/workflows/.
+if [ -e "$dst/.github/workflows/loop.yml" ]; then echo "skip  .github/workflows/loop.yml (exists)"; else
+  mkdir -p "$dst/.github/workflows"; cp "$src/ci/loop.yml" "$dst/.github/workflows/loop.yml"
+  echo "add   .github/workflows/loop.yml (from ci/loop.yml)"; fi
 
 # AGENTS.md / CLAUDE.md: keep the lean canonical files, just point them at the loop docs.
 [ -e "$dst/AGENTS.md" ] || { cp "$src/AGENTS.md" "$dst/AGENTS.md"; echo "add   AGENTS.md"; }
