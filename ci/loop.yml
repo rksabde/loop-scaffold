@@ -1,7 +1,11 @@
 name: agent-loop
-# Unattended mode. Runs the fleet on a schedule and on demand.
-# Requires a secret with your Claude Code auth (e.g. ANTHROPIC_API_KEY,
-# or a Claude subscription token per your setup).
+# Unattended mode (GitHub Actions). triage.sh runs INTAKE (inbox → draft plans) then
+# the FLEET (status: ready plans only — drafts wait for human review). The local
+# equivalent is `loop/schedule.sh install` (launchd/cron).
+# Requires a repo secret with auth for your LOOP_TOOL (ANTHROPIC_API_KEY for claude,
+# OPENAI_API_KEY for codex, etc.).
+# NOTE: across fresh CI runners, intake's .intake.sha markers (gitignored, local) don't
+# persist → intake re-plans each run. For CI idempotency, commit portable markers (follow-up).
 
 on:
   schedule:
