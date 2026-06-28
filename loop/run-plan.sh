@@ -23,9 +23,22 @@ git -C "$repo" worktree add -B "$branch" "$wt" "${BASE_BRANCH:-main}" 2>/dev/nul
 
 [ -z "$TIMEOUT_BIN" ] && log "[$slug] no timeout/gtimeout on PATH — running without a wall-clock kill switch (the \$-budget cap still applies)"
 
+# If a prior attempt was rejected by the verifier, integrate.sh leaves its verdict here.
+# Feed it back so this attempt fixes the SPECIFIC findings instead of starting blind.
+feedback=""
+fb="$repo/loop/logs/$slug.feedback"
+if [ -s "$fb" ]; then
+  feedback="
+
+⚠️ A PREVIOUS ATTEMPT WAS REJECTED by the independent verifier. Do NOT start over —
+fix exactly what it flagged below, then re-check every Acceptance box yourself:
+$(cat "$fb")
+"
+fi
+
 read -r -d '' prompt <<PROMPT || true
 $(cat "$repo/$plan")
-
+$feedback
 Work ONLY within this worktree and the plan's stated scope. Make the SMALLEST change
 that satisfies every \`## Acceptance\` check. As soon as all acceptance commands pass:
   1. Commit your work on this branch: \`git add -A && git commit -m '<plan slug>: <summary>'\`.

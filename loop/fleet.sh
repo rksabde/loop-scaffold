@@ -13,11 +13,25 @@ if [ -z "$ready" ]; then
   exit 0
 fi
 
-log "dispatching $(echo "$ready" | wc -l | tr -d ' ') plan(s), -P ${MAX_PARALLEL:-3}:"
+# AUTO_INTEGRATE=1 → each plan runs the CLOSED loop (execute→verify→merge|retry|
+# replan|block) via integrate.sh. Off (default) → bare executor runs; you verify and
+# merge by hand afterward.
+if [ "${AUTO_INTEGRATE:-0}" = "1" ]; then
+  worker="loop/integrate.sh"; mode="closed loop (verify+merge+self-correct)"
+else
+  worker="loop/run-plan.sh";  mode="executor only (manual verify+merge)"
+fi
+
+log "dispatching $(echo "$ready" | wc -l | tr -d ' ') plan(s), -P ${MAX_PARALLEL:-3}, mode: $mode"
 echo "$ready" >&2
 
-echo "$ready" | xargs -P "${MAX_PARALLEL:-3}" -I{} bash loop/run-plan.sh {}
+echo "$ready" | xargs -P "${MAX_PARALLEL:-3}" -I{} bash "$worker" {}
 
 log "fleet done."
-log "branches:  git branch --list 'loop/*'"
-log "verify:    ./loop/verify.sh plans/<plan>.md"
+if [ "${AUTO_INTEGRATE:-0}" = "1" ]; then
+  log "merged → main: git log --oneline | grep integrate"
+  log "blocked:       ls loop/logs/*.blocked.md 2>/dev/null"
+else
+  log "branches:  git branch --list 'loop/*'"
+  log "verify:    ./loop/verify.sh plans/<plan>.md"
+fi

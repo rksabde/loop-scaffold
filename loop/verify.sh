@@ -41,9 +41,23 @@ PROMPT
 # Edit/Write), and runs in an ephemeral detached worktree, so bypassPermissions lets it
 # EXECUTE checks while still being unable to modify the repo. (Codex: workspace-write
 # already allows running commands.)
+vfile="$SCAFFOLD_ROOT/loop/logs/$slug.verdict.json"
 ( cd "$wt" && PERMISSION_MODE=bypassPermissions CODEX_SANDBOX=workspace-write \
-    adapter_run verifier "$prompt" "$SCAFFOLD_ROOT/loop/logs/$slug.verdict.json" )
-rc=$?
+    adapter_run verifier "$prompt" "$vfile" )
 git worktree remove --force "$wt" 2>/dev/null || true
-cat "$SCAFFOLD_ROOT/loop/logs/$slug.verdict.json"
-exit $rc
+cat "$vfile"
+
+# Make the verdict machine-readable so the closed loop (integrate.sh) can act on it.
+# Exit code is the SIGNAL: 0=PASS, 1=FAIL, 2=ERROR (couldn't read a verdict). The raw
+# auditor result is also dropped at <slug>.feedback so a retry executor sees exactly
+# what was wrong, in the auditor's own words.
+verdict="$(plan_verdict "$vfile")"
+log "[verify] $slug verdict=$verdict"
+case "$verdict" in
+  PASS) exit 0 ;;
+  FAIL) python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("result",""))' \
+          "$vfile" 2>/dev/null > "$SCAFFOLD_ROOT/loop/logs/$slug.feedback" || \
+          cp "$vfile" "$SCAFFOLD_ROOT/loop/logs/$slug.feedback"
+        exit 1 ;;
+  *)    exit 2 ;;
+esac

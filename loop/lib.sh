@@ -32,6 +32,25 @@ worktree_path() { printf '%s/%s-%s' "$WORKTREE_DIR" "$REPO_NAME" "$1"; }
 
 log() { printf '%s  %s\n' "$(date +%FT%T)" "$*" >&2; }
 
+# set_status <plan-file> <value> — rewrite the `status:` line in a plan's frontmatter.
+# Portable in-place sed (BSD/macOS needs the -i backup suffix); no-op if absent.
+set_status() {
+  local f="$1" v="$2"
+  grep -qE '^status:' "$f" 2>/dev/null || return 0
+  sed -i.bak -E "s/^status:.*/status: $v/" "$f" && rm -f "$f.bak"
+}
+
+# plan_verdict <verdict-log> — echo PASS | FAIL | ERROR by scanning the verifier's
+# JSON result. Dependency-free: the embedded verdict survives JSON-escaping as
+# verdict"…"pass, so a loose proximity match is robust whether or not jq is present.
+plan_verdict() {
+  local vf="$1"
+  [ -s "$vf" ] || { echo ERROR; return; }
+  if   grep -qiE 'verdict[\\":[:space:]]+pass' "$vf"; then echo PASS
+  elif grep -qiE 'verdict[\\":[:space:]]+fail' "$vf"; then echo FAIL
+  else echo ERROR; fi
+}
+
 require() { command -v "$1" >/dev/null 2>&1 || { log "MISSING: $1 not on PATH"; exit 127; }; }
 
 # Portable wall-clock timeout: GNU `timeout`, else `gtimeout` (macOS coreutils),
