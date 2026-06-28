@@ -18,6 +18,18 @@ if [ -f "$SCAFFOLD_ROOT/.env" ]; then
   . "$SCAFFOLD_ROOT/.env"; set +a
 fi
 
+# Where plan/verify git worktrees are created. Default: a single `wt/` dir BESIDE the
+# repo (e.g. ~/Claude/dev/wt/) so the parent dev folder isn't littered with wt-* siblings.
+# Override in loop.conf or .env (WORKTREE_DIR=/abs/or/relative/path). Worktrees are named
+# <repo>-<slug> so several repos can safely share one WORKTREE_DIR root.
+REPO_NAME="$(basename "$SCAFFOLD_ROOT")"
+WORKTREE_DIR="${WORKTREE_DIR:-$SCAFFOLD_ROOT/../wt}"
+# Normalize to an absolute path (create it first so `cd && pwd` can resolve `..`).
+WORKTREE_DIR="$(mkdir -p "$WORKTREE_DIR" 2>/dev/null; cd "$WORKTREE_DIR" 2>/dev/null && pwd || printf '%s' "$WORKTREE_DIR")"
+
+# worktree_path <slug> → absolute path for that worktree, namespaced by repo.
+worktree_path() { printf '%s/%s-%s' "$WORKTREE_DIR" "$REPO_NAME" "$1"; }
+
 log() { printf '%s  %s\n' "$(date +%FT%T)" "$*" >&2; }
 
 require() { command -v "$1" >/dev/null 2>&1 || { log "MISSING: $1 not on PATH"; exit 127; }; }

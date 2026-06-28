@@ -17,7 +17,7 @@ git diff "${BASE_BRANCH:-main}...loop/$slug" > "loop/logs/$slug.diff" 2>/dev/nul
 
 # Audit IN a checkout of the branch (detached, so it coexists with the executor's
 # worktree) — acceptance commands then run against the branch's actual state, not main.
-wt="$SCAFFOLD_ROOT/../wt-verify-$slug"
+wt="$(worktree_path "verify-$slug")"
 git worktree remove --force "$wt" 2>/dev/null || true
 git worktree add --detach "$wt" "loop/$slug" >/dev/null 2>&1 \
   || { log "[verify] cannot check out loop/$slug"; exit 1; }

@@ -49,7 +49,7 @@ fi
 grep -qxF '@LOOPS.md' "$dst/CLAUDE.md" 2>/dev/null || { printf '@LOOPS.md\n' >> "$dst/CLAUDE.md"; echo "edit  CLAUDE.md (@LOOPS.md)"; }
 
 chmod +x "$dst"/loop/*.sh
-grep -qxF 'wt-*/' "$dst/.gitignore" 2>/dev/null || printf '\n# loop scaffold\nwt-*/\nloop/logs/\nloop/state/\n.intake.sha\nAGENTS.override.md\n' >> "$dst/.gitignore"
+grep -qxF 'wt-*/' "$dst/.gitignore" 2>/dev/null || printf '\n# loop scaffold\nwt-*/\nwt/\nloop/logs/\nloop/state/\n.intake.sha\nAGENTS.override.md\n' >> "$dst/.gitignore"
 
 echo
 echo "✓ installed. Next: edit $dst/loop.conf (LINT_CMD/TEST_CMD), then ./loop/fleet.sh"

@@ -12,7 +12,7 @@ source "$(dirname "$0")/adapters/${LOOP_TOOL:-claude}.sh"
 plan="${1:?usage: run-plan.sh plans/NNN-name.md}"
 slug="$(basename "$plan" .md)"
 repo="$SCAFFOLD_ROOT"
-wt="$repo/../wt-$slug"
+wt="$(worktree_path "$slug")"
 branch="loop/$slug"
 mkdir -p "$repo/loop/logs"
 
