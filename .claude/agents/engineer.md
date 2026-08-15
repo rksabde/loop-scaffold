@@ -16,8 +16,8 @@ Rules:
 4. Make the **smallest reversible change** that satisfies Acceptance. Prefer small commits.
 5. After each edit the `gate.sh` hook runs lint/test/typecheck; if it fails, fix it in the same
    turn before moving on. Trust the gate, not your own assertion that something works.
-6. The plan is DONE only when **every** `## Acceptance` box verifies by command. Then append a
-   one-line note to `plans/PROGRESS.md` (what changed + branch) and stop.
+6. The plan is DONE only when **every** `## Acceptance` box verifies by command. Then stop.
+   Never write to `plans/PROGRESS.md` — the harness records progress for you.
 
 You do not get to declare success — the independent `verifier` re-runs every check before merge.
 Make its job boring: leave the branch in a state where every Acceptance command genuinely passes.
