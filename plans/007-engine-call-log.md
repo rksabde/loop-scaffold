@@ -1,6 +1,6 @@
 # 007 — Engine call log: record the ACTUAL LLM behind every worker call
 
-status: draft
+status: done
 worktree: engine-call-log
 
 ## Goal (verifiable)

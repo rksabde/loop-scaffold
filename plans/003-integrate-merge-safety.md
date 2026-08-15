@@ -1,6 +1,6 @@
 # 003 — integrate.sh merge safety (lock, bookkeeping commits, crash recovery)
 
-status: draft
+status: done
 worktree: integrate-merge-safety
 
 ## Goal (verifiable)

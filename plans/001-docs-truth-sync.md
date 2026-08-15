@@ -1,6 +1,6 @@
 # 001 — Docs truth sync (kill stale claims from earlier LLM passes)
 
-status: draft
+status: done
 worktree: docs-truth-sync
 
 ## Goal (verifiable)

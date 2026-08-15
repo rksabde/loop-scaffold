@@ -1,6 +1,6 @@
 # 002 — PROGRESS.md single-writer contract
 
-status: draft
+status: done
 worktree: progress-contract
 
 ## Goal (verifiable)

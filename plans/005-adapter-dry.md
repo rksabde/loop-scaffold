@@ -1,6 +1,6 @@
 # 005 — Adapter DRY: one chain-walk, thin adapters
 
-status: draft
+status: done
 worktree: adapter-dry
 
 ## Goal (verifiable)

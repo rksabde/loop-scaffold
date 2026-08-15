@@ -1,6 +1,6 @@
 # 004 — Fleet idempotency (don't re-run finished work)
 
-status: draft
+status: done
 worktree: fleet-idempotency
 
 ## Goal (verifiable)

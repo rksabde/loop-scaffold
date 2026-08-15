@@ -1,6 +1,6 @@
 # 008 — Committed transcripts: every effective commit carries its own LLM chats
 
-status: draft
+status: done
 worktree: transcripts
 
 ## Goal (verifiable)
