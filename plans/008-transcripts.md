@@ -1,47 +1,52 @@
-# 008 — Committed transcripts: every effective commit carries its LLM chats
+# 008 — Committed transcripts: every effective commit carries its own LLM chats
 
 status: draft
 worktree: transcripts
 
 ## Goal (verifiable)
-For each effective work commit, the repo permanently records the LLM conversations that
-produced it, under `.transcripts/<shortsha>-<slug>/`:
-- `engineer.md` — rendered readable transcript of the executor run (prompt → responses)
-- `verifier.md` — rendered verdict transcript (when a verify ran)
-- `meta.json` — engine/call metadata (from plan 007's extractor: requested vs actual
-  model, cost, turns, duration, attempt number)
-- raw JSON logs included only when `TRANSCRIPT_RAW=1` (they run 100s of KB).
+Every effective commit CONTAINS the transcript of the LLM run that produced it — no
+follow-up "transcripts:" commits, no sha-named files. Under `.transcripts/<slug>/`:
+- `attempt-NN-engineer.md` — rendered executor transcript, rides in that attempt's WORK commit
+- `verify-NN-verifier.md` + `meta-NN.json` — verdict transcript + call metadata, ride in
+  the bookkeeping commit (plan 003's status-flip commit) after verification
+- `replan-NN-planner.md` — planner rewrite transcript, rides in the replan bookkeeping commit
+- raw JSON logs only when `TRANSCRIPT_RAW=1` (they run 100s of KB).
 
-## Design (chicken–egg resolved)
-A transcript named by a commit cannot live IN that commit (amend would change the sha).
-So: work commit lands → harness resolves `shortsha=$(git rev-parse --short HEAD)` →
-writes `.transcripts/<shortsha>-<slug>/…` → immediate FOLLOW-UP commit
-`transcripts: <slug> @ <shortsha>` on the same branch. Merge carries both.
-- Executor transcripts: run-plan.sh, after its harness-commit (skip if nothing committed).
-- Verifier transcript: verify.sh writes it; integrate.sh commits it post-merge keyed to
-  the MERGE commit sha (manual mode: left staged-ready with a log hint, or committed by
-  the bookkeeping step from plan 003).
-- Replan transcripts (planner rewrites): keyed to the replan bookkeeping commit.
+## Design (no chicken–egg)
+The executor's chat log is COMPLETE before the harness commits — so the transcript is
+rendered FIRST and the work commit includes it. Filenames use slug + attempt number
+(known before commit); the commit sha is never needed in a name because git itself is
+the mapping:
+- which transcript came with commit X → `git show X --stat`
+- which commit added transcript Y → `git log --diff-filter=A -- .transcripts/<slug>/Y`
+
+Flow per attempt (run-plan.sh): `adapter_run` → render `attempt-NN-engineer.md` from the
+JSON log → existing `git add -A && git commit` picks it up. NN = next free number in the
+dir (works for manual runs and integrate retries alike).
+Verifier (verify.sh renders; integrate.sh's bookkeeping commit from plan 003 carries it):
+`verify-NN-verifier.md` + `meta-NN.json` (engine/cost/actual-model from plan 007).
+Manual mode (no integrate): verify.sh leaves the rendered files in place and logs a hint;
+they ride in whatever commit the human makes at merge time.
+
 - Renderer: `loop/transcript.py` (python3 stdlib only) — parses claude `--output-format
-  json` result and codex JSONL into markdown; tolerant of unknown shapes (falls back to
-  dumping text fields). Registered in install.sh copy list.
-- `.transcripts/` is COMMITTED (that's the point) — do NOT gitignore. Add a one-line
-  README.md inside explaining the naming scheme.
+  json` and codex JSONL into markdown (prompt, assistant turns, tool summary); tolerant
+  of unknown shapes (falls back to dumping text fields). Added to install.sh copy list.
+- `.transcripts/` is COMMITTED (that's the point) — never gitignore it. Ship a one-line
+  `.transcripts/README.md` explaining the scheme (created lazily on first transcript).
+- Never block the loop on transcript failure: renderer errors log a warning, run goes on.
 
 ## Constraints
 - Depends on 003 (bookkeeping commits) + 007 (meta extractor). Do after both.
-- Never block the loop on transcript failure: renderer errors log a warning, loop goes on.
-- Follow-up commits must be `--no-verify`-free (they contain no secrets; if the global
-  secret hook false-positives on model output, document the bypass in the commit).
+- run-plan.sh/verify.sh/integrate.sh call-site contracts unchanged otherwise.
 
 ## Acceptance
-- [ ] Stubbed run-plan cycle: after harness commit, `.transcripts/<sha>-<slug>/engineer.md`
-      exists and a `transcripts:` commit follows the work commit (`git log --oneline -2`)
-- [ ] Real cheap run end-to-end (integrate on a tiny plan): merge commit followed by a
-      transcripts commit containing verifier.md + meta.json; `git status` clean after
-- [ ] `python3 loop/transcript.py <a real claude json log>` produces markdown with the
+- [ ] Stubbed run-plan cycle: work commit contains BOTH the code change and
+      `.transcripts/<slug>/attempt-01-engineer.md` (`git show --stat HEAD` proves it)
+- [ ] Second stubbed attempt on same slug → `attempt-02-engineer.md` in the retry's commit
+- [ ] Real cheap integrate run (tiny plan): bookkeeping commit contains
+      `verify-01-verifier.md` + `meta-01.json`; `git status` clean after
+- [ ] `python3 loop/transcript.py <real claude json log>` emits markdown containing the
       prompt and at least one assistant message
-- [ ] meta.json parses (`python3 -c "import json;json.load(open(...))"`) and includes
-      model_actual + cost_usd
+- [ ] `meta-01.json` parses and includes model_actual + cost_usd
 - [ ] `grep -q "transcript.py" loop/install.sh` (shipped to targets)
-- [ ] TRANSCRIPT_RAW unset → no *.json raw logs inside .transcripts/ for the test run
+- [ ] TRANSCRIPT_RAW unset → no raw *.json inside .transcripts/ for the test run
