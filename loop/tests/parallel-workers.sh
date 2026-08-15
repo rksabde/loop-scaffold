@@ -36,6 +36,14 @@ python3 -c "import json; json.load(open('$HOME/.claude.json'))" 2>/dev/null || {
 if [ "$overall" = 0 ]; then
   echo "VERDICT: CLEAN — $((N*ROUNDS)) parallel-session runs, all exit 0, outputs valid, ~/.claude.json intact"
 else
-  echo "VERDICT: DIRTY — do not raise MAX_PARALLEL above 1 without per-worker isolation"
+  echo "--- first failing output (diagnosis) ---"
+  for f in "$T"/out-*.json; do
+    python3 -c "import json,sys; d=json.load(open(sys.argv[1])); ok = not d.get('is_error') and 'pong' in d.get('result','').lower(); sys.exit(0 if ok else 1)" "$f" 2>/dev/null \
+      || { echo "[$f]"; head -c 500 "$f"; echo; break; }
+  done
+  echo "----------------------------------------"
+  echo "VERDICT: DIRTY — but read the diagnosis above: auth/env failures are NOT"
+  echo "state corruption; only a corruption signature (garbled JSON, crossed sessions,"
+  echo "corrupt ~/.claude.json) argues against MAX_PARALLEL>1."
 fi
 exit "$overall"
