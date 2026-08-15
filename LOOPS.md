@@ -28,7 +28,7 @@ A FAIL verdict is not handed to the human — the loop fixes itself, bounded:
    fed the verifier's own verdict as the fix list.
 3. **Strategic retry** — still failing, the *planner* rewrites the plan up to
    `MAX_REPLANS`, then the executor retries the improved plan.
-4. **Escalate** — both caps exhausted → `status: blocked` + `loop/logs/<slug>.blocked.md`.
+4. **Escalate** — both caps exhausted → `status: blocked` + `plans/<slug>.blocked.md`.
    Blocked plans are the ONLY failures a human ever reviews.
 On PASS the branch is merged into `BASE_BRANCH`, the plan flips to `status: done`, and the
 worktree is cleaned. Caps live in `loop.conf`; total executor runs ≤ `(MAX_REPLANS+1)*MAX_ATTEMPTS`.
