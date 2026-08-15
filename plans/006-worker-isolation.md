@@ -1,6 +1,6 @@
 # 006 — Parallel worker session-state isolation (investigate, then fix or bound)
 
-status: draft
+status: blocked
 worktree: worker-isolation
 
 ## Goal (verifiable)
@@ -31,3 +31,11 @@ a safe MAX_PARALLEL default.
 - [ ] Test script committed under loop/tests/ (or documented one-liner in the plan) and run
 - [ ] README states the verdict explicitly (safe / bounded) with the evidence one-liner
 - [ ] loop.conf MAX_PARALLEL default + comment consistent with the verdict
+
+## Progress (2026-08-14)
+- Test script SHIPPED: `loop/tests/parallel-workers.sh` (N parallel × R rounds of headless
+  `claude -p` in separate worktrees; checks exits, outputs, ~/.claude.json integrity).
+- BLOCKED on a human terminal run: from an app-nested/sandboxed context every nested
+  `claude -p` fails "Not logged in" (keychain credentials are not reachable), so the
+  live verdict cannot be produced here. Run: `./loop/tests/parallel-workers.sh` and paste
+  the VERDICT line; then finish the README/loop.conf wording per the plan.
