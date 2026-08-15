@@ -1,6 +1,6 @@
 # 006 — Parallel worker session-state isolation (investigate, then fix or bound)
 
-status: blocked
+status: done
 worktree: worker-isolation
 
 ## Goal (verifiable)
@@ -32,10 +32,11 @@ a safe MAX_PARALLEL default.
 - [ ] README states the verdict explicitly (safe / bounded) with the evidence one-liner
 - [ ] loop.conf MAX_PARALLEL default + comment consistent with the verdict
 
-## Progress (2026-08-14)
-- Test script SHIPPED: `loop/tests/parallel-workers.sh` (N parallel × R rounds of headless
-  `claude -p` in separate worktrees; checks exits, outputs, ~/.claude.json integrity).
-- BLOCKED on a human terminal run: from an app-nested/sandboxed context every nested
-  `claude -p` fails "Not logged in" (keychain credentials are not reachable), so the
-  live verdict cannot be produced here. Run: `./loop/tests/parallel-workers.sh` and paste
-  the VERDICT line; then finish the README/loop.conf wording per the plan.
+## Progress (2026-08-14) — DONE, verdict (a): SAFE
+- `loop/tests/parallel-workers.sh` shipped; run on the user's terminal after re-login
+  (machine migration had staled the CLI keychain — the first DIRTY verdicts were auth
+  failures, which the test now diagnoses inline).
+- **VERDICT: CLEAN** — 3 concurrent headless sessions x 2 rounds, all exit 0, outputs
+  valid, ~/.claude.json intact. Sessions are cwd-keyed; distinct worktrees don't collide.
+- README documents the verdict + evidence; loop.conf MAX_PARALLEL=3 comment updated;
+  stale corruption warning removed from claude-framework AGENTS.md gotchas.

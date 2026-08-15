@@ -82,6 +82,12 @@ issue, per TODO cluster). Drafts always wait for a human `draft → ready` promo
   no tool restriction, only the `workspace-write` sandbox: the codex verifier *can*
   write to its checkout. The checkout is discarded after the audit, but treat codex
   verification as sandbox-bounded, not read-only.
+- **Parallel workers are safe** sharing one `~/.claude` — verified 2026-08-14 by
+  `loop/tests/parallel-workers.sh` (3 concurrent headless sessions × 2 rounds in separate
+  worktrees: all exit 0, outputs valid, `~/.claude.json` intact; sessions are keyed by cwd
+  path, so distinct worktrees don't collide). `MAX_PARALLEL=3` default stands. Caveat: run
+  the test from a logged-in terminal — sandboxed/nested contexts fail "Not logged in"
+  before touching any state.
 - Gitignore build artifacts (`__pycache__/`, `node_modules/`, etc.) **before** the first commit —
   the harness commits with `git add -A`, and the verifier flags out-of-scope files.
 - Command flags evolve; if one errors, check `claude --help` and adjust `loop.conf`.
