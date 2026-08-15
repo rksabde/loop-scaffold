@@ -52,6 +52,23 @@ PROMPT
   # The 'engineer' role's engine is resolved from .env (LOOP_ENGINE_ENGINEER / _DEFAULT).
   adapter_run engineer "$prompt" "$repo/loop/logs/$slug.json"
   rc=$?
+  # The transcript rides INSIDE the commit it documents: the run's log is complete
+  # here, so render it into the worktree BEFORE the harness commit picks it up.
+  # (git maps commit↔transcript: `git show <sha> --stat` / `git log --diff-filter=A`.)
+  tdir=".transcripts/$slug"; mkdir -p "$tdir"
+  [ -f .transcripts/README.md ] || printf '%s\n' \
+    "# .transcripts/ — committed LLM transcripts, per plan" \
+    "Each work commit carries attempt-NN-engineer.md (the executor chat that produced it);" \
+    "bookkeeping commits carry verify-NN-verifier.md + meta-NN.json (verdict + engine/cost)." \
+    > .transcripts/README.md
+  nn="$(printf '%02d' $(( $(ls "$tdir"/attempt-*-engineer.md 2>/dev/null | wc -l) + 1 )))"
+  printf '%s' "$prompt" > "$repo/loop/logs/$slug.prompt"
+  python3 "$repo/loop/transcript.py" "$repo/loop/logs/$slug.json" \
+      --prompt "$repo/loop/logs/$slug.prompt" --role engineer \
+      --title "$slug — attempt $nn (engineer)" > "$tdir/attempt-$nn-engineer.md" 2>/dev/null \
+    || log "[$slug] transcript render failed (run continues)"
+  [ "${TRANSCRIPT_RAW:-0}" = "1" ] && cp "$repo/loop/logs/$slug.json" "$tdir/attempt-$nn-engineer.raw.json"
+
   # Harness commits whatever the agent changed, so the branch carries a diff the
   # verifier can audit — reliable regardless of headless permission mode (which
   # auto-accepts edits but not `git commit`).

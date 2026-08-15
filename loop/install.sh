@@ -14,6 +14,7 @@ copy() {  # never clobber an existing file
 for f in loop.conf LOOPS.md .env.example \
          loop/lib.sh loop/engine.sh loop/gate.sh loop/run-plan.sh loop/fleet.sh \
          loop/verify.sh loop/integrate.sh loop/triage.sh loop/intake.sh loop/schedule.sh \
+         loop/transcript.py loop/tests/parallel-workers.sh \
          loop/adapters/claude.sh loop/adapters/codex.sh loop/adapters/opencode.sh \
          .claude/settings.json \
          .claude/agents/verifier.md .claude/agents/researcher.md .claude/agents/engineer.md \

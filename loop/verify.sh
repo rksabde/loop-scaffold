@@ -54,6 +54,16 @@ cat "$vfile"
 # what was wrong, in the auditor's own words.
 verdict="$(plan_verdict "$vfile")"
 log "[verify] $slug verdict=$verdict"
+
+# Transcript + call meta for the audit, rendered into the ROOT .transcripts/ — the
+# integrate bookkeeping commit (or the human's merge commit, manual mode) carries them.
+tdir="$SCAFFOLD_ROOT/.transcripts/$slug"; mkdir -p "$tdir"
+nn="$(printf '%02d' $(( $(ls "$tdir"/verify-*-verifier.md 2>/dev/null | wc -l) + 1 )))"
+python3 "$SCAFFOLD_ROOT/loop/transcript.py" "$vfile" --role verifier \
+    --title "$slug — verify $nn (verdict: $verdict)" > "$tdir/verify-$nn-verifier.md" 2>/dev/null \
+  || log "[verify] transcript render failed (verdict unaffected)"
+tail -1 "$SCAFFOLD_ROOT/loop/logs/calls.jsonl" 2>/dev/null > "$tdir/meta-$nn.json" || true
+[ "${TRANSCRIPT_RAW:-0}" = "1" ] && cp "$vfile" "$tdir/verify-$nn-verifier.raw.json"
 case "$verdict" in
   PASS) exit 0 ;;
   FAIL) python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("result",""))' \
