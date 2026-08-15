@@ -18,7 +18,7 @@ for f in loop.conf LOOPS.md .env.example \
          .claude/settings.json \
          .claude/agents/verifier.md .claude/agents/researcher.md .claude/agents/engineer.md \
          .claude/agents/planner.md \
-         plans/000-EXAMPLE.md plans/PROGRESS.md; do
+         plans/000-EXAMPLE.md plans/README.md plans/PROGRESS.md; do
   copy "$f"
 done
 

@@ -17,7 +17,9 @@ This repo is driven by autonomous loops (see `loop/` and `plans/`).
 ## Agent roles (`.claude/agents/`)
 - **researcher** — read-only recon (cheap, fan out wide). Delegate codebase exploration to it.
 - **engineer** — the executor: smallest change that turns Acceptance green, in scope only.
-- **verifier** — independent pre-merge auditor (strong model, read-only); re-runs every check.
+- **verifier** — independent pre-merge auditor (strong model); re-runs every check.
+  Read-only by tool restriction under Claude; under Codex only sandbox-bounded
+  (`workspace-write` in a throwaway checkout), not truly read-only.
 - **planner** — intake/PM: turns inbox artifacts into plans, and rewrites a plan that
   keeps failing verification (the `integrate.sh` replan step). Writes `plans/` only.
 Fan out the cheap read-only role (researcher); keep write/coordination roles bounded.
