@@ -11,6 +11,7 @@ source "$(dirname "$0")/adapters/${LOOP_TOOL:-claude}.sh"
 
 plan="${1:?usage: run-plan.sh plans/NNN-name.md}"
 slug="$(basename "$plan" .md)"
+export LOOP_PLAN_SLUG="$slug"     # attributes loop/logs/calls.jsonl lines to this plan
 repo="$SCAFFOLD_ROOT"
 wt="$(worktree_path "$slug")"
 branch="loop/$slug"
@@ -59,8 +60,11 @@ PROMPT
     git commit -q -m "$slug: automated loop changes"
     log "[$slug] committed changes to $branch"
   fi
-  printf -- '- %s exit=%s %s branch=%s\n' \
-    "$slug" "$rc" "$(date +%FT%T)" "$branch" >> "$repo/plans/PROGRESS.md"
+  # engine=/model=/cost= come from the engine call log (which LLM actually answered)
+  printf -- '- %s exit=%s %s branch=%s engine=%s model=%s cost=%s\n' \
+    "$slug" "$rc" "$(date +%FT%T)" "$branch" \
+    "${ENGINE_LAST_ENGINE:--}" "${ENGINE_LAST_MODEL:--}" "${ENGINE_LAST_COST:--}" \
+    >> "$repo/plans/PROGRESS.md"
   log "[$slug] finished exit=$rc  (log: loop/logs/$slug.json)"
   exit $rc
 )

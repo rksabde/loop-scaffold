@@ -10,6 +10,7 @@ source "$(dirname "$0")/adapters/${LOOP_TOOL:-claude}.sh"
 
 plan="${1:?usage: verify.sh plans/NNN-name.md}"
 slug="$(basename "$plan" .md)"
+export LOOP_PLAN_SLUG="$slug"     # attributes loop/logs/calls.jsonl lines to this plan
 cd "$SCAFFOLD_ROOT"
 mkdir -p loop/logs
 

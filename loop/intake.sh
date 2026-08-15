@@ -44,7 +44,7 @@ tasks and write one draft plan per task into the repo's plans/ directory, follow
 format in plans/README.md. Number plans sequentially AFTER any that already exist in
 plans/. Every plan is status: draft. Write ONLY under plans/.
 PROMPT
-  adapter_run planner "$prompt" "$SCAFFOLD_ROOT/loop/logs/intake-$name.json"
+  LOOP_PLAN_SLUG="intake-$name" adapter_run planner "$prompt" "$SCAFFOLD_ROOT/loop/logs/intake-$name.json"
   if [ "${LOOP_DRYRUN:-0}" = "1" ]; then
     log "[intake] (dry-run) would plan '$name' — marker NOT written"
   else

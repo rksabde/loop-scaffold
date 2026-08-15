@@ -92,6 +92,58 @@ engine_clear_cooldown() { rm -f "$ENGINE_STATE_DIR/$1.cooldown" 2>/dev/null; }  
 # Best-effort seconds-until-reset from the error (else empty → default cooldown).
 adapter_retry_after() { grep -oiE 'retry[_-]?after"?[ :=]+[0-9]+' "$1" 2>/dev/null | grep -oE '[0-9]+' | head -1; }
 
+# ── Engine call log ───────────────────────────────────────────────────
+# One JSON line per worker call → loop/logs/calls.jsonl: what was REQUESTED
+# (engine + exec string) and what ACTUALLY answered (model ids from the result log —
+# claude's modelUsage keys are real dated ids; ccr/codex may route to something else
+# than the alias asked for, which is exactly why both sides are recorded).
+# Callers set LOOP_PLAN_SLUG so lines are attributable to a plan.
+# Also exports ENGINE_LAST_MODEL / ENGINE_LAST_COST / ENGINE_LAST_ENGINE for the
+# caller's own bookkeeping (e.g. run-plan.sh's PROGRESS line).
+ENGINE_CALLS_LOG="$SCAFFOLD_ROOT/loop/logs/calls.jsonl"
+
+_engine_call_log() {   # role prov tier exec logfile rc kind(run|dryrun|limited)
+  local out
+  mkdir -p "$(dirname "$ENGINE_CALLS_LOG")"
+  out="$(CL_PATH="$ENGINE_CALLS_LOG" CL_LOG="$5" CL_ROLE="$1" CL_TOOL="${ADAPTER_TOOL:-?}" \
+         CL_ENGINE="$2:$3" CL_EXEC="$4" CL_RC="$6" CL_KIND="$7" \
+         CL_PLAN="${LOOP_PLAN_SLUG:--}" python3 - <<'PY' 2>/dev/null
+import json, os, time
+e = os.environ
+rec = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "plan": e["CL_PLAN"], "role": e["CL_ROLE"],
+       "tool": e["CL_TOOL"], "engine": e["CL_ENGINE"], "exec": e["CL_EXEC"],
+       "exit": int(e["CL_RC"]), "kind": e["CL_KIND"],
+       "model_actual": "", "cost_usd": None, "turns": None, "duration_ms": None}
+if e["CL_KIND"] != "dryrun":
+    try:
+        raw = open(e["CL_LOG"], errors="replace").read()
+        try:                      # claude --output-format json: one result object
+            d = json.loads(raw)
+            rec["model_actual"] = ",".join(sorted((d.get("modelUsage") or {}).keys()))
+            rec["cost_usd"] = d.get("total_cost_usd")
+            rec["turns"] = d.get("num_turns")
+            rec["duration_ms"] = d.get("duration_ms")
+        except ValueError:        # codex --json: JSONL events; best-effort model scrape
+            models = set()
+            for line in raw.splitlines():
+                try: ev = json.loads(line)
+                except ValueError: continue
+                for k in ("model",):
+                    v = ev.get(k) or (ev.get("msg") or {}).get(k) if isinstance(ev, dict) else None
+                    if isinstance(v, str): models.add(v)
+            rec["model_actual"] = ",".join(sorted(models))
+    except OSError:
+        pass
+with open(e["CL_PATH"], "a") as f:
+    f.write(json.dumps(rec) + "\n")
+print(f'{rec["model_actual"]}|{rec["cost_usd"] if rec["cost_usd"] is not None else ""}')
+PY
+)"
+  ENGINE_LAST_ENGINE="$2:$3"
+  ENGINE_LAST_MODEL="${out%%|*}"
+  ENGINE_LAST_COST="${out#*|}"
+}
+
 # availability incl. cooldown: a cooling-down provider is treated as unavailable.
 engine_usable() { engine_in_cooldown "$1" && return 1; engine_available "$1" "$2"; }
 
@@ -116,14 +168,17 @@ adapter_run() {
     if [ "${LOOP_DRYRUN:-0}" = "1" ]; then
       printf 'DRYRUN role=%s tool=%s engine=%s:%s %s\n' \
         "$role" "$ADAPTER_TOOL" "$prov" "$tier" "$(adapter_dryrun_tail "$prov" "$tier")" | tee "$logf"
+      _engine_call_log "$role" "$prov" "$tier" "$(adapter_describe "$prov" "$tier")" "$logf" 0 dryrun
       return 0
     fi
 
     adapter_invoke "$prov" "$tier" "$prompt" "$logf"; rc=$?
     if adapter_is_limit "$logf"; then
+      _engine_call_log "$role" "$prov" "$tier" "$(adapter_describe "$prov" "$tier")" "$logf" "$rc" limited
       engine_set_cooldown "$prov" "$(adapter_retry_after "$logf")"
       continue                                   # fail over to the next link
     fi
+    _engine_call_log "$role" "$prov" "$tier" "$(adapter_describe "$prov" "$tier")" "$logf" "$rc" run
     return $rc                                   # success / task-failure / our budget cap — stop
   done
   log "[engine] $role: chain exhausted (all unavailable or rate-limited): '$chain'"
