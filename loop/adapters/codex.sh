@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # loop/adapters/codex.sh — OpenAI Codex adapter for the engine seam.
-# Contract (shared with every loop/adapters/<tool>.sh):
-#   adapter_run <role> <prompt> <logfile>
+# The chain-walk (adapter_run) lives ONCE in loop/engine.sh; this file provides only
+# the Codex-specific pieces of the contract documented there.
 #
 # Codex is OpenAI-native, so OpenAI-format providers go DIRECT — no ccr shim:
 #   frontier → OpenAI (Codex's configured model, e.g. gpt-5.5); tier → reasoning effort
@@ -12,12 +12,14 @@
 # Cross-tool caveats (the loop SHAPE transfers; Claude-only niceties don't):
 #   - `.claude/agents/*.md` subagents and the `.claude/settings.json` PostToolUse gate are
 #     no-ops under Codex. The executor still edits in its worktree and the harness commits;
-#     the verifier runs from its prompt without a formal subagent.
+#     the verifier runs from its prompt without a formal subagent (and is sandbox-bounded,
+#     not tool-restricted read-only).
 #   - Codex headless = `codex exec`, output is JSONL (`--json`) + last message (`-o`).
 #   - No `--max-budget-usd` equivalent; bound via the task + sandbox, not a $ cap.
 
 source "$(dirname "${BASH_SOURCE[0]}")/../engine.sh"
 
+ADAPTER_TOOL="codex"
 OLLAMA_HOST="${OLLAMA_HOST:-ollama-gpu.home.arpa:11434}"
 LOCAL_MODEL="${LOCAL_MODEL:-qwen3.6:27b}"
 
@@ -31,7 +33,6 @@ engine_available() {
     *)        log "[engine] codex: unknown provider '$1'"; return 1 ;;
   esac
 }
-engine_usable() { engine_in_cooldown "$1" && return 1; engine_available "$1" "$2"; }
 
 # (provider, tier) -> codex flags (model / provider / reasoning effort)
 _codex_flags() {
@@ -51,40 +52,16 @@ adapter_is_limit() {              # logfile (codex JSONL)
   grep -qiE 'rate.?limit|usage limit|insufficient_quota|quota.?exceeded|"status":429|too many requests' "$1" 2>/dev/null
 }
 
-# adapter_run <role> <prompt> <logfile> — walk the role's engine-chain, skip
-# unavailable/cooling links, run codex; fail over on a provider rate/usage limit.
-adapter_run() {
-  local role prompt logf chain spec prov tier flags sandbox rc OLDIFS
-  role="$1"; prompt="$2"; logf="$3"
-  chain="$(engine_chain_for_role "$role")"
+adapter_describe()    { echo "codex exec $(_codex_flags "$1" "$2")"; }
+adapter_dryrun_tail() { echo "flags=[$(_codex_flags "$1" "$2")]"; }
 
-  OLDIFS="$IFS"; IFS='|'; set -- $chain; IFS="$OLDIFS"
-  for spec in "$@"; do
-    spec="${spec// /}"; prov="${spec%%:*}"
-    if [ "$spec" = "$prov" ]; then tier="high"; else tier="${spec#*:}"; fi
-    if ! engine_usable "$prov" "$tier"; then
-      engine_in_cooldown "$prov" && log "[engine] $role: '$prov' cooling down — next" \
-                                 || log "[engine] $role: '$prov' unavailable — next"
-      continue
-    fi
-    flags="$(_codex_flags "$prov" "$tier")"
-    log "[engine] $role → $prov:$tier  (codex exec $flags)"
-
-    if [ "${LOOP_DRYRUN:-0}" = "1" ]; then
-      printf 'DRYRUN role=%s tool=codex engine=%s:%s flags=[%s]\n' "$role" "$prov" "$tier" "$flags" | tee "$logf"
-      return 0
-    fi
-
-    sandbox="-s ${CODEX_SANDBOX:-workspace-write}"
-    [ "${CODEX_FULL_AUTO:-0}" = "1" ] && sandbox="--dangerously-bypass-approvals-and-sandbox"
-    ${TIMEOUT_BIN:+$TIMEOUT_BIN "${TIMEOUT:-35m}"} \
-      codex exec "$prompt" $flags $sandbox \
-        --skip-git-repo-check -C "$PWD" --json -o "$logf.last" \
-        < /dev/null > "$logf" 2>&1
-    rc=$?
-    if adapter_is_limit "$logf"; then engine_set_cooldown "$prov" "$(grep -oiE 'retry[_-]?after"?[ :=]+[0-9]+' "$logf" | grep -oE '[0-9]+' | head -1)"; continue; fi
-    return $rc
-  done
-  log "[engine] $role: chain exhausted (all unavailable or rate-limited): '$chain'"
-  return 1
+adapter_invoke() {                # provider tier prompt logfile
+  local flags sandbox
+  flags="$(_codex_flags "$1" "$2")"
+  sandbox="-s ${CODEX_SANDBOX:-workspace-write}"
+  [ "${CODEX_FULL_AUTO:-0}" = "1" ] && sandbox="--dangerously-bypass-approvals-and-sandbox"
+  ${TIMEOUT_BIN:+$TIMEOUT_BIN "${TIMEOUT:-35m}"} \
+    codex exec "$3" $flags $sandbox \
+      --skip-git-repo-check -C "$PWD" --json -o "$4.last" \
+      < /dev/null > "$4" 2>&1
 }
