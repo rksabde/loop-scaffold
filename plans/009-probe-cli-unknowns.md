@@ -1,6 +1,6 @@
 # 009 — Probe the CLI unknowns the new design depends on (spec §7)
 
-status: blocked
+status: done
 worktree: probe-cli-unknowns
 
 ## Goal (verifiable)
@@ -50,3 +50,9 @@ Blocks: 010 (adapter flags depend on probes 1–3), 014 (probes 3–4), 016 (pro
 - BLOCKED on a human terminal run (sandbox has no login / no LAN DNS):
   `./loop/tests/probe-cli.sh` → paste the PROBE lines; then §7 of the spec gets rewritten
   as verified facts and 010 is finalized.
+
+## Result (2026-09-17) — DONE
+Ran from the agent session once a `claude setup-token` file existed. 1 PASS (bare name),
+2 PASS (after sonnet re-run), 3 PASS, 4 PASS (`structured_output`), 5 PASS direct-to-OpenRouter
+with `--bare` (6 vs 32,482 input tokens), 6 OpenRouter PASS / Ollama untested (wrong subnet).
+Spec §7 rewritten as verified facts. Follow-up: re-probe Ollama `/v1/messages` on the 192.168.1.x LAN.

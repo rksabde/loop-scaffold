@@ -60,8 +60,7 @@ it is a *tool* (so it should be installed). Subtree is a symptom, not the diseas
 | `claude setup-token` | Long-lived subscription token → CI and sandboxed contexts without keychain (the 006 "Not logged in" failure mode) |
 | `claude plugin install/update/marketplace/validate/tag` | First-class plugin distribution + versioning |
 
-Unverified from this sandbox (DNS blocked): whether the Ollama box and OpenRouter expose a
-native Anthropic Messages endpoint. See §7.
+Probe results for the open points are in §7.
 
 ## 4. Alternatives
 
@@ -230,14 +229,30 @@ Plans: P0 → `plans/009`, P1 → `010`, P2 → `011`, P3 → `012`, P4 → `013
 Old vendored repos keep working untouched until migrated (the one upside of vendoring), so
 the cut-over can be one repo at a time.
 
-## 7. Open questions to verify before P1 (cheap, <1h, logged-in terminal)
+## 7. Verified facts (probed 2026-09-17, Claude Code 2.1.233, `loop/tests/probe-cli.sh` + targeted re-runs)
 
-1. Does `--agent <name>` resolve a **plugin-provided** agent, and under what name (`engineer` vs `loop:engineer`)? Fallback: `--append-system-prompt-file` + `--tools`.
-2. Does `hooks/hooks.json` in a `--plugin-dir` plugin fire under `-p`, with `${CLAUDE_PLUGIN_ROOT}` expanded?
-3. Does `--setting-sources project` keep subscription auth working and actually drop user-scope plugins/skills?
-4. `--json-schema` together with `--output-format stream-json`: where does the validated object land in the final event?
-5. `--bare` + `ANTHROPIC_BASE_URL` + dummy `ANTHROPIC_API_KEY` against ccr/Ollama — accepted?
-6. Native Anthropic endpoints: `curl -X POST http://ollama-gpu.home.arpa:11434/v1/messages …` and OpenRouter's Anthropic-compatible base URL — do both answer? (Blocked by DNS from the sandbox this spec was written in.)
+| # | Question | Result |
+|---|---|---|
+| 1 | `--agent` + plugin-provided agent | **PASS** — resolves by bare name: `--plugin-dir P --agent engineer` (no `plugin:` prefix needed) |
+| 2 | Plugin hooks under `-p` | **PASS** — `hooks/hooks.json` from a `--plugin-dir` plugin fires headless; `${CLAUDE_PLUGIN_ROOT}` expands in the command AND is set in the hook's env. (First run was inconclusive: haiku answered "Done." without calling Write; re-run on sonnet wrote the file and both markers fired.) |
+| 3 | `--setting-sources project --strict-mcp-config` | **PASS** — subscription auth survives; user scope dropped: plugins 2→0, MCP servers 1→0, tools 39→31, skills 22→19, slash commands 56→51 |
+| 4 | `--json-schema` + `stream-json` | **PASS** — validated object at `result_event.structured_output` (also mirrored as a JSON string in `.result`) |
+| 5 | `--bare` for 3P engines | **PASS, and better than asked** — works **direct to OpenRouter, no ccr**: `ANTHROPIC_BASE_URL=https://openrouter.ai/api` + `ANTHROPIC_API_KEY=<openrouter key>` + `--bare --model z-ai/glm-4.7` → `pong`, `modelUsage` = `z-ai/glm-4.7`. Reported input tokens for a "pong" prompt: **6 with `--bare` vs 32,482 without** — the default harness context is ~32k tokens per worker call, which a 3P/local model pays for on every turn. (ccr path untested: the daemon was down.) |
+| 6 | Native Anthropic endpoints | **OpenRouter PASS** — `POST https://openrouter.ai/api/v1/messages` answers with `Authorization: Bearer` **and** `x-api-key`. **Ollama UNTESTED** — the Mac was on 192.168.68.x with no route to 192.168.1.157 (`home.arpa` unresolvable); re-probe when on that LAN. |
+
+Consequences:
+- 010 uses `--plugin-dir` + `--agent <role>` as designed; no fallbacks needed.
+- 014: verdict = `structured_output`; slimming flags are safe on subscription runs.
+- 016: **`glm` goes `direct` transport (no ccr)**; `local` stays on ccr until the Ollama probe
+  is re-run on the right network. 3P engines run `--bare` — the 32k→~0 context cut is the
+  single biggest cost/quality lever for cheap and local models. `--bare` skips CLAUDE.md
+  discovery and plugins by default, so the adapter must pass context explicitly
+  (`--plugin-dir`, `--add-dir`/`--append-system-prompt-file` for AGENTS.md) — verify hooks
+  still fire under `--bare --plugin-dir` in 010.
+- Headless auth: nested/launchd/CI contexts cannot rely on the keychain login (observed:
+  "OAuth session expired and could not be refreshed"). Use `claude setup-token` → 0600 file
+  `~/.config/claude/oauth-token` → exported as `CLAUDE_CODE_OAUTH_TOKEN` for frontier calls
+  only (never forwarded to 3P routes). 010 moves this from the probe into `engine.sh`.
 
 ## 8. Decisions
 
