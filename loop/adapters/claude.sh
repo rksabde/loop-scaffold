@@ -6,14 +6,14 @@
 # Provider mapping (Claude speaks Anthropic format; OpenAI-format providers go via ccr):
 #   frontier → real Anthropic (your subscription); NO ccr; tier→opus/sonnet/haiku
 #   glm      → ccr → OpenRouter GLM           ; tier high/mid→glm-5.2, low→glm-4.7
-#   local    → ccr → Ollama box               ; single model (LOCAL_MODEL, default qwen3.6:27b)
+#   local    → ccr → Ollama box               ; single model (LOCAL_MODEL, default gpt-oss:20b on localhost)
 
 source "$(dirname "${BASH_SOURCE[0]}")/../engine.sh"
 
 ADAPTER_TOOL="claude"
 CCR_URL="${CCR_BASE_URL:-http://127.0.0.1:3456}"
-OLLAMA_HOST="${OLLAMA_HOST:-ollama-gpu.home.arpa:11434}"
-LOCAL_MODEL="${LOCAL_MODEL:-qwen3.6:27b}"
+OLLAMA_HOST="${OLLAMA_HOST:-localhost:11434}"
+LOCAL_MODEL="${LOCAL_MODEL:-gpt-oss:20b}"
 
 _ccr_up() { command -v ccr >/dev/null 2>&1 || return 1; ccr status >/dev/null 2>&1 || ccr start >/dev/null 2>&1; ccr status >/dev/null 2>&1; }
 

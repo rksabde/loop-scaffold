@@ -238,13 +238,15 @@ the cut-over can be one repo at a time.
 | 3 | `--setting-sources project --strict-mcp-config` | **PASS** — subscription auth survives; user scope dropped: plugins 2→0, MCP servers 1→0, tools 39→31, skills 22→19, slash commands 56→51 |
 | 4 | `--json-schema` + `stream-json` | **PASS** — validated object at `result_event.structured_output` (also mirrored as a JSON string in `.result`) |
 | 5 | `--bare` for 3P engines | **PASS, and better than asked** — works **direct to OpenRouter, no ccr**: `ANTHROPIC_BASE_URL=https://openrouter.ai/api` + `ANTHROPIC_API_KEY=<openrouter key>` + `--bare --model z-ai/glm-4.7` → `pong`, `modelUsage` = `z-ai/glm-4.7`. Reported input tokens for a "pong" prompt: **6 with `--bare` vs 32,482 without** — the default harness context is ~32k tokens per worker call, which a 3P/local model pays for on every turn. (ccr path untested: the daemon was down.) |
-| 6 | Native Anthropic endpoints | **OpenRouter PASS** — `POST https://openrouter.ai/api/v1/messages` answers with `Authorization: Bearer` **and** `x-api-key`. **Ollama UNTESTED** — the Mac was on 192.168.68.x with no route to 192.168.1.157 (`home.arpa` unresolvable); re-probe when on that LAN. |
+| 6 | Native Anthropic endpoints | **PASS on both.** OpenRouter: `POST https://openrouter.ai/api/v1/messages` answers with `Authorization: Bearer` **and** `x-api-key`. Ollama (localhost, v0.32.5): `POST /v1/messages` → 200 `message` (thinking + text blocks); end-to-end `claude --bare` with `ANTHROPIC_BASE_URL=http://localhost:11434 ANTHROPIC_API_KEY=ollama --model gpt-oss:20b` → `pong` in ~5s, no ccr. |
 
 Consequences:
 - 010 uses `--plugin-dir` + `--agent <role>` as designed; no fallbacks needed.
 - 014: verdict = `structured_output`; slimming flags are safe on subscription runs.
-- 016: **`glm` goes `direct` transport (no ccr)**; `local` stays on ccr until the Ollama probe
-  is re-run on the right network. 3P engines run `--bare` — the 32k→~0 context cut is the
+- 016: **both `glm` and `local` go `direct` transport — ccr is removable entirely** (kept only
+  as an optional transport for OpenAI-only providers). Local default is now Ollama on
+  `localhost:11434` with `gpt-oss:20b` (the old GPU box `ollama-gpu.home.arpa` / `qwen3.6:27b`
+  is reachable only from the 192.168.1.x LAN — set `OLLAMA_HOST`/`LOCAL_MODEL` in `.env` to use it). 3P engines run `--bare` — the 32k→~0 context cut is the
   single biggest cost/quality lever for cheap and local models. `--bare` skips CLAUDE.md
   discovery and plugins by default, so the adapter must pass context explicitly
   (`--plugin-dir`, `--add-dir`/`--append-system-prompt-file` for AGENTS.md) — verify hooks

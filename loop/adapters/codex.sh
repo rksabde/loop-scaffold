@@ -20,8 +20,8 @@
 source "$(dirname "${BASH_SOURCE[0]}")/../engine.sh"
 
 ADAPTER_TOOL="codex"
-OLLAMA_HOST="${OLLAMA_HOST:-ollama-gpu.home.arpa:11434}"
-LOCAL_MODEL="${LOCAL_MODEL:-qwen3.6:27b}"
+OLLAMA_HOST="${OLLAMA_HOST:-localhost:11434}"
+LOCAL_MODEL="${LOCAL_MODEL:-gpt-oss:20b}"
 
 # Can the Codex tool use this provider right now?
 engine_available() {

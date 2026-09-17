@@ -13,8 +13,8 @@ set -uo pipefail
 
 MODEL="${PROBE_MODEL:-haiku}"
 OFFLINE="${PROBE_OFFLINE:-0}"
-OLLAMA_HOST="${OLLAMA_HOST:-ollama-gpu.home.arpa:11434}"
-LOCAL_MODEL="${LOCAL_MODEL:-qwen3.6:27b}"
+OLLAMA_HOST="${OLLAMA_HOST:-localhost:11434}"
+LOCAL_MODEL="${LOCAL_MODEL:-gpt-oss:20b}"
 CCR_URL="${CCR_BASE_URL:-http://127.0.0.1:3456}"
 OR_KEY_FILE="${OR_KEY_FILE:-$HOME/.config/openrouter/key}"
 OR_MODEL="${OR_MODEL:-z-ai/glm-4.7}"
