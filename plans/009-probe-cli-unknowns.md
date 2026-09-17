@@ -1,6 +1,6 @@
 # 009 — Probe the CLI unknowns the new design depends on (spec §7)
 
-status: draft
+status: blocked
 worktree: probe-cli-unknowns
 
 ## Goal (verifiable)
@@ -41,3 +41,12 @@ HUMAN: must be run from your own terminal — nested/sandboxed contexts fail "No
 HUMAN (independent): flip `rksabde/loop-scaffold` to public (history scanned 2026-09-17: 0
 key-shaped hits) — unblocks the CI clone step in 013/014.
 Blocks: 010 (adapter flags depend on probes 1–3), 014 (probes 3–4), 016 (probes 5–6).
+
+## Progress (2026-09-17)
+- `loop/tests/probe-cli.sh` SHIPPED. Verified here: `bash -n`; probe plugin passes
+  `claude plugin validate`; analyzer unit-tested on fixtures (result/err/none, marker, init
+  counts, schema path, Messages-API body); preflight-abort path + probe-6 failure path
+  exercised end-to-end (exactly six PROBE lines, zero key leakage).
+- BLOCKED on a human terminal run (sandbox has no login / no LAN DNS):
+  `./loop/tests/probe-cli.sh` → paste the PROBE lines; then §7 of the spec gets rewritten
+  as verified facts and 010 is finalized.
