@@ -26,7 +26,15 @@ T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 say()    { printf '%s\n' "$*" | tee -a "$OUT"; }
 detail() { printf '    · %s\n' "$*" | tee -a "$OUT"; }
 tlimit() { local s="$1"; shift; perl -e 'alarm shift; exec @ARGV' "$s" "$@"; }   # portable timeout
-# frontier call = strip any proxy/env overrides so the subscription login is used
+# frontier call = strip any proxy/env overrides so the subscription login is used.
+# Headless/nested contexts (desktop-app sessions, launchd, CI) often cannot use the
+# keychain login. If a long-lived token from `claude setup-token` was saved (0600) at
+# $CLAUDE_TOKEN_FILE, pass it via env — read at exec time, never echoed.
+CLAUDE_TOKEN_FILE="${CLAUDE_TOKEN_FILE:-$HOME/.config/claude/oauth-token}"
+# (exported, not passed as an argv element — argv is visible in `ps`.)
+if [ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] && [ -s "$CLAUDE_TOKEN_FILE" ]; then
+  CLAUDE_CODE_OAUTH_TOKEN="$(tr -d '\n\r ' < "$CLAUDE_TOKEN_FILE")"; export CLAUDE_CODE_OAUTH_TOKEN
+fi
 CL=(env -u ANTHROPIC_BASE_URL -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_API_KEY claude)
 
 # ── analysis helper (python3 stdlib) ─────────────────────────────────────────
@@ -132,7 +140,8 @@ case "$base" in ok\|*) ;; *) AUTH_OK=0 ;; esac
 
 if [ "$AUTH_OK" = 0 ]; then
   say "PREFLIGHT FAILED — frontier call did not succeed: ${base#*|}"
-  say "  (auth problem — 'Not logged in' / 'OAuth session expired': run \`claude\`, type /login, retry. Not a probe result.)"
+  say "  (auth problem, not a probe result. Own terminal: run \`claude\` → /login. Nested/headless context:"
+  say "   \`claude setup-token\`, save the token to $CLAUDE_TOKEN_FILE (chmod 600) — this script picks it up.)"
   for n in 1 2 3 4 5; do say "PROBE $n: ABORTED (preflight auth failure)"; done
 else
   # ── PROBE 1: does --agent resolve a PLUGIN-provided agent, and under which name? ──
@@ -219,12 +228,12 @@ PY
   if [ -z "$m" ]; then
     say "PROBE 5: SKIPPED — ccr not available, or neither the Ollama box nor an OpenRouter key is reachable"
   else
-    ( cd "$T/proj" && tlimit 420 env -u ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL="$CCR_URL" ANTHROPIC_API_KEY="probe-dummy" \
+    ( cd "$T/proj" && tlimit 420 env -u CLAUDE_CODE_OAUTH_TOKEN -u ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL="$CCR_URL" ANTHROPIC_API_KEY="probe-dummy" \
         claude --bare -p "Reply with exactly: pong" --model "$m" --output-format json < /dev/null > "$T/p5.json" 2>&1 )
     r5="$(an result "$T/p5.json")"
     case "$r5" in
       ok\|*) say "PROBE 5: PASS — --bare works through ccr with a dummy API key (model $m → \"$(printf '%s' "${r5#*|}" | cut -c1-40)\")" ;;
-      *)  ( cd "$T/proj" && tlimit 420 env -u ANTHROPIC_API_KEY ANTHROPIC_BASE_URL="$CCR_URL" ANTHROPIC_AUTH_TOKEN="ccr" \
+      *)  ( cd "$T/proj" && tlimit 420 env -u CLAUDE_CODE_OAUTH_TOKEN -u ANTHROPIC_API_KEY ANTHROPIC_BASE_URL="$CCR_URL" ANTHROPIC_AUTH_TOKEN="ccr" \
               claude -p "Reply with exactly: pong" --model "$m" --output-format json < /dev/null > "$T/p5b.json" 2>&1 )
           case "$(an result "$T/p5b.json")" in
             ok\|*) say "PROBE 5: FAIL — --bare rejected (${r5#*|}) while the normal ccr route works → keep non-bare for 3P engines" ;;
