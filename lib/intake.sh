@@ -36,7 +36,7 @@ for dir in "$INBOX"/*/; do
   fi
   log "[intake] initiative '$name' new/changed → planning (planner → frontier)"
   read -r -d '' prompt <<PROMPT || true
-Use the planner subagent to plan the initiative in: $dir
+Plan the initiative in: $dir
 
 Read EVERY artifact in that folder (markdown, PDFs, images/screenshots of decks, chat
 exports, notes — use vision for images/PDFs). Decompose it into a small set of phases →

@@ -10,10 +10,12 @@
 #              then add a case below). Treated as unavailable so chains skip it.
 #
 # Cross-tool caveats (the loop SHAPE transfers; Claude-only niceties don't):
-#   - The loop plugin (plugin/agents/*.md roles + the PostToolUse gate in plugin/hooks/)
-#     is Claude-only — a no-op under Codex. The executor still edits in its worktree and the harness commits;
-#     the verifier runs from its prompt without a formal subagent (and is sandbox-bounded,
-#     not tool-restricted read-only).
+#   - The PostToolUse gate (plugin/hooks/) is Claude-only — a no-op under Codex. The executor
+#     still edits in its worktree and the harness commits.
+#   - Roles: Codex has no --agent flag, so for engineer/verifier/planner the role file's body
+#     (plugin/agents/<role>.md minus frontmatter, via engine_role_prompt) is PREPENDED to the
+#     prompt. Tool restriction does not transfer: the verifier is sandbox-bounded, not
+#     tool-restricted read-only. No --json-schema either → the verdict is read by grep.
 #   - Codex headless = `codex exec`, output is JSONL (`--json`) + last message (`-o`).
 #   - No `--max-budget-usd` equivalent; bound via the task + sandbox, not a $ cap.
 
@@ -55,6 +57,16 @@ adapter_is_limit() {              # logfile (codex JSONL)
 adapter_describe()    { echo "codex exec $(_codex_flags "$1" "$2")"; }
 adapter_dryrun_tail() { echo "flags=[$(_codex_flags "$1" "$2")]"; }
 
+# The prompt codex actually receives: role instructions (if any) + the task prompt.
+_codex_prompt() {                 # prompt
+  local role_txt
+  if role_txt="$(engine_role_prompt "${ENGINE_ROLE:-}")" && [ -n "$role_txt" ]; then
+    printf '%s\n\n---\n\n%s' "$role_txt" "$1"
+  else
+    printf '%s' "$1"
+  fi
+}
+
 adapter_invoke() {                # provider tier prompt logfile
   local flags sandbox
   flags="$(_codex_flags "$1" "$2")"
@@ -62,7 +74,7 @@ adapter_invoke() {                # provider tier prompt logfile
   [ "${CODEX_FULL_AUTO:-0}" = "1" ] && sandbox="--dangerously-bypass-approvals-and-sandbox"
   ( export LOOP_WORKER=1 LOOP_HOME LOOP_PROJECT_ROOT
     ${TIMEOUT_BIN:+$TIMEOUT_BIN "${TIMEOUT:-35m}"} \
-      codex exec "$3" $flags $sandbox \
+      codex exec "$(_codex_prompt "$3")" $flags $sandbox \
         --skip-git-repo-check -C "$PWD" --json -o "$4.last" \
         < /dev/null > "$4" 2>&1 )
 }

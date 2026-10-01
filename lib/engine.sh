@@ -40,6 +40,26 @@ engine_chain_for_role() {
   printf '%s' "${LOOP_ENGINE_DEFAULT:-frontier:high}"
 }
 
+# ── Role = the session ────────────────────────────────────────────────
+# engineer / verifier / planner each RUN AS their role (not "use the X subagent"):
+#   claude → `--agent <role>` (resolved by bare name from --plugin-dir, spec §7.1)
+#   codex  → no --agent flag; the role file's body is prepended to the prompt.
+# The researcher is deliberately NOT a session role: it stays a real subagent the
+# engineer fans out to (plugin/agents/engineer.md tells it to delegate recon).
+ENGINE_SESSION_ROLES="engineer verifier planner"
+
+engine_session_role() {           # role -> 0 if it runs as the session agent
+  case " $ENGINE_SESSION_ROLES " in *" $1 "*) [ -f "$LOOP_HOME/plugin/agents/$1.md" ] ;; *) return 1 ;; esac
+}
+
+# engine_role_prompt <role> — the role's instructions: plugin/agents/<role>.md with the
+# leading YAML frontmatter (--- … ---) stripped. Empty (rc 1) for non-session roles.
+engine_role_prompt() {
+  engine_session_role "$1" || return 1
+  awk 'NR==1 && $0=="---" {fm=1; next} fm && $0=="---" {fm=0; next} !fm' \
+    "$LOOP_HOME/plugin/agents/$1.md" | sed '/./,$!d'
+}
+
 # Split one "provider:tier" spec into "$provider $tier" (split on FIRST colon so a
 # concrete model with its own colon survives, e.g. local:qwen3.6:27b). Missing tier -> high.
 engine_split() {

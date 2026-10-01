@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # lib/verify.sh — independent pre-merge audit of a plan's branch.
-# Runs the 'verifier' subagent (strong model, read-only) which re-runs
-# each Acceptance check itself rather than trusting the executor.
+# The session RUNS AS the 'verifier' role (claude: --agent verifier; strong model,
+# read-only by tool restriction) and re-runs each Acceptance check itself rather than
+# trusting the executor.
 #
 #   loop verify plans/002-auth-v2.md
 set -uo pipefail
@@ -26,7 +27,7 @@ git worktree add --detach "$wt" "loop/$slug" >/dev/null 2>&1 \
 # real Anthropic even when the fleet default is cheap), so the auditor never grades
 # itself with the cheap execution engine.
 read -r -d '' prompt <<PROMPT || true
-Use the verifier subagent. You are in a CHECKOUT of branch loop/$slug (this working dir).
+You are in a CHECKOUT of branch loop/$slug (this working dir).
 Plan file contents:
 $(cat "$plan")
 

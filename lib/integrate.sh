@@ -139,7 +139,7 @@ _block() {
 _replan() {
   log "[integrate] $slug replanning from failure (planner → frontier)"
   read -r -d '' rp <<PROMPT || true
-Use the planner subagent. The plan below FAILED automated verification after $ATTEMPTS
+The plan below FAILED automated verification after $ATTEMPTS
 executor attempt(s). Rewrite it IN PLACE so it is achievable: correct wrong assumptions,
 fix or tighten the \`## Acceptance\` checks, add missing context/constraints, narrow scope.
 Keep the SAME file path ($plan), the SAME plan number, and the SAME \`worktree:\` value;

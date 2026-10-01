@@ -19,6 +19,8 @@
 #   --append-system-prompt-file templates/LOOPS.md   the loop protocol (not written into projects)
 #   --setting-sources project --strict-mcp-config    don't inherit the human's plugins/skills/MCP
 #   env LOOP_WORKER=1 LOOP_HOME LOOP_PROJECT_ROOT    arms the gate (no-op without LOOP_WORKER=1)
+#   --agent <role>      engineer/verifier/planner RUN AS their plugin role (engine_session_role);
+#                       the researcher stays a subagent the engineer can spawn.
 #   stdout → <logfile> (the JSON result only), stderr → <logfile>.stderr — a stray stderr line
 #   (e.g. "[claude-code:unrecognized_model]" on local models) must not corrupt the JSON.
 #
@@ -116,13 +118,15 @@ adapter_describe() {
 adapter_dryrun_tail() { echo "model=$(_claude_model "$1" "$2") transport=$(_claude_transport "$1")"; }
 
 adapter_invoke() {                # provider tier prompt logfile
-  local model bare=()
+  local model bare=() extra=()
   model="$(_claude_model "$1" "$2")"
   _claude_bare "$1" && bare=(--bare)
+  engine_session_role "${ENGINE_ROLE:-}" && extra+=(--agent "$ENGINE_ROLE")
   ( _claude_apply_env "$1"
     # < /dev/null: headless claude otherwise waits on / consumes stdin (flaky/empty output in subshells)
     ${TIMEOUT_BIN:+$TIMEOUT_BIN "${TIMEOUT:-35m}"} claude -p "$3" \
       ${bare[@]+"${bare[@]}"} \
+      ${extra[@]+"${extra[@]}"} \
       --model "$model" \
       --plugin-dir "$LOOP_HOME/plugin" \
       --append-system-prompt-file "$LOOP_HOME/templates/LOOPS.md" \
