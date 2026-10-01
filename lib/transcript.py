@@ -12,6 +12,34 @@ import json
 import sys
 
 
+def claude_result(raw):
+    """Return the claude `--output-format json` result object from a log, or None.
+
+    Tolerant of a log that has non-JSON lines before the object (old logs captured
+    stderr with 2>&1, e.g. a leading "[claude-code:unrecognized_model]" line): if the
+    whole text is not one JSON object, the LAST line that parses as a dict with
+    type == "result" wins. Codex JSONL events never carry type "result", so a codex
+    log yields None (callers then use their JSONL path).
+    """
+    try:
+        d = json.loads(raw)
+        return d if isinstance(d, dict) else None
+    except ValueError:
+        pass
+    found = None
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            d = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(d, dict) and d.get("type") == "result":
+            found = d
+    return found
+
+
 def render_claude(d, out):
     mu = sorted((d.get("modelUsage") or {}).keys())
     out.append("## Run\n")
@@ -73,9 +101,10 @@ def main():
         out.append(f"(log unreadable: {e})")
         print("\n".join(out))
         return
-    try:
-        render_claude(json.loads(raw), out)
-    except ValueError:
+    d = claude_result(raw)
+    if d is not None:
+        render_claude(d, out)
+    else:
         render_jsonl(raw, out)
     print("\n".join(out))
 

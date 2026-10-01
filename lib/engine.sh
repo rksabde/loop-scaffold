@@ -90,7 +90,8 @@ engine_clear_cooldown() { rm -f "$ENGINE_STATE_DIR/$1.cooldown" 2>/dev/null; }  
 #   adapter_retry_after <logfile>       optional override; default below
 
 # Best-effort seconds-until-reset from the error (else empty → default cooldown).
-adapter_retry_after() { grep -oiE 'retry[_-]?after"?[ :=]+[0-9]+' "$1" 2>/dev/null | grep -oE '[0-9]+' | head -1; }
+# Scans the result log AND its .stderr sidecar (the claude adapter splits stderr out).
+adapter_retry_after() { cat "$1" "$1.stderr" 2>/dev/null | grep -oiE 'retry[_-]?after"?[ :=]+[0-9]+' | grep -oE '[0-9]+' | head -1; }
 
 # ── Engine call log ───────────────────────────────────────────────────
 # One JSON line per worker call → .loop/logs/calls.jsonl: what was REQUESTED
@@ -107,8 +108,8 @@ _engine_call_log() {   # role prov tier exec logfile rc kind(run|dryrun|limited)
   mkdir -p "$(dirname "$ENGINE_CALLS_LOG")"
   out="$(CL_PATH="$ENGINE_CALLS_LOG" CL_LOG="$5" CL_ROLE="$1" CL_TOOL="${ADAPTER_TOOL:-?}" \
          CL_ENGINE="$2:$3" CL_EXEC="$4" CL_RC="$6" CL_KIND="$7" \
-         CL_PLAN="${LOOP_PLAN_SLUG:--}" python3 - <<'PY' 2>/dev/null
-import json, os, time
+         CL_PLAN="${LOOP_PLAN_SLUG:--}" CL_HOME="$LOOP_HOME" python3 - <<'PY' 2>/dev/null
+import json, os, sys, time
 e = os.environ
 rec = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "plan": e["CL_PLAN"], "role": e["CL_ROLE"],
        "tool": e["CL_TOOL"], "engine": e["CL_ENGINE"], "exec": e["CL_EXEC"],
@@ -117,13 +118,16 @@ rec = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "plan": e["CL_PLAN"], "role": e
 if e["CL_KIND"] != "dryrun":
     try:
         raw = open(e["CL_LOG"], errors="replace").read()
-        try:                      # claude --output-format json: one result object
-            d = json.loads(raw)
+        sys.dont_write_bytecode = True   # never litter $LOOP_HOME/lib with __pycache__
+        sys.path.insert(0, os.path.join(e["CL_HOME"], "lib"))
+        from transcript import claude_result   # tolerant: skips stray non-JSON lines
+        d = claude_result(raw)
+        if d is not None:         # claude --output-format json: one result object
             rec["model_actual"] = ",".join(sorted((d.get("modelUsage") or {}).keys()))
             rec["cost_usd"] = d.get("total_cost_usd")
             rec["turns"] = d.get("num_turns")
             rec["duration_ms"] = d.get("duration_ms")
-        except ValueError:        # codex --json: JSONL events; best-effort model scrape
+        else:                     # codex --json: JSONL events; best-effort model scrape
             models = set()
             for line in raw.splitlines():
                 try: ev = json.loads(line)

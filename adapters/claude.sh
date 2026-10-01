@@ -19,6 +19,8 @@
 #   --append-system-prompt-file templates/LOOPS.md   the loop protocol (not written into projects)
 #   --setting-sources project --strict-mcp-config    don't inherit the human's plugins/skills/MCP
 #   env LOOP_WORKER=1 LOOP_HOME LOOP_PROJECT_ROOT    arms the gate (no-op without LOOP_WORKER=1)
+#   stdout → <logfile> (the JSON result only), stderr → <logfile>.stderr — a stray stderr line
+#   (e.g. "[claude-code:unrecognized_model]" on local models) must not corrupt the JSON.
 #
 # --bare (glm/local only — hermetic, ~32k fewer context tokens per call; spec §7.5):
 #   Probed 2026-10-01, Claude Code 2.1.233 (plan 010 Progress), prompt "Write probe.txt",
@@ -101,9 +103,10 @@ _claude_apply_env() {
 }
 
 # Is this result a provider RATE/USAGE limit (→ fail over)? NOT our budget cap, NOT a task failure.
+# Checks the result log AND <logfile>.stderr (a limit may only be reported on stderr).
 adapter_is_limit() {              # logfile
-  grep -q '"subtype":"error_max_budget_usd"' "$1" 2>/dev/null && return 1   # our cap, not a provider limit
-  grep -qiE 'usage limit|rate[ _-]?limit|"type":"?(overloaded|rate_limit)|too many requests|429|quota.?exceeded' "$1" 2>/dev/null
+  grep -q '"subtype":"error_max_budget_usd"' "$1" "$1.stderr" 2>/dev/null && return 1   # our cap, not a provider limit
+  grep -qiE 'usage limit|rate[ _-]?limit|"type":"?(overloaded|rate_limit)|too many requests|429|quota.?exceeded' "$1" "$1.stderr" 2>/dev/null
 }
 
 adapter_describe() {
@@ -126,5 +129,5 @@ adapter_invoke() {                # provider tier prompt logfile
       --setting-sources project --strict-mcp-config \
       --permission-mode "${PERMISSION_MODE:-acceptEdits}" \
       ${MAX_BUDGET_USD:+--max-budget-usd "$MAX_BUDGET_USD"} \
-      --output-format json < /dev/null > "$4" 2>&1 )
+      --output-format json < /dev/null > "$4" 2> "$4.stderr" )
 }
