@@ -1,8 +1,8 @@
 wt-*/
-loop/logs/
-loop/state/
+.loop/
 AGENTS.override.md
 .env
 .env.*
 !.env.example
+!templates/.env.example
 __pycache__/
