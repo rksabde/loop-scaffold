@@ -21,6 +21,8 @@
 #   env LOOP_WORKER=1 LOOP_HOME LOOP_PROJECT_ROOT    arms the gate (no-op without LOOP_WORKER=1)
 #   --agent <role>      engineer/verifier/planner RUN AS their plugin role (engine_session_role);
 #                       the researcher stays a subagent the engineer can spawn.
+#   --json-schema <s>   when the caller sets LOOP_JSON_SCHEMA=<schema file> (verify.sh does, for
+#                       the verifier): the validated object lands at result.structured_output.
 #   stdout → <logfile> (the JSON result only), stderr → <logfile>.stderr — a stray stderr line
 #   (e.g. "[claude-code:unrecognized_model]" on local models) must not corrupt the JSON.
 #
@@ -122,6 +124,10 @@ adapter_invoke() {                # provider tier prompt logfile
   model="$(_claude_model "$1" "$2")"
   _claude_bare "$1" && bare=(--bare)
   engine_session_role "${ENGINE_ROLE:-}" && extra+=(--agent "$ENGINE_ROLE")
+  if [ -n "${LOOP_JSON_SCHEMA:-}" ]; then
+    [ -s "$LOOP_JSON_SCHEMA" ] && extra+=(--json-schema "$(cat "$LOOP_JSON_SCHEMA")") \
+      || log "[claude] LOOP_JSON_SCHEMA='$LOOP_JSON_SCHEMA' unreadable — running without --json-schema"
+  fi
   ( _claude_apply_env "$1"
     # < /dev/null: headless claude otherwise waits on / consumes stdin (flaky/empty output in subshells)
     ${TIMEOUT_BIN:+$TIMEOUT_BIN "${TIMEOUT:-35m}"} claude -p "$3" \

@@ -2,7 +2,8 @@
 # lib/verify.sh — independent pre-merge audit of a plan's branch.
 # The session RUNS AS the 'verifier' role (claude: --agent verifier; strong model,
 # read-only by tool restriction) and re-runs each Acceptance check itself rather than
-# trusting the executor.
+# trusting the executor. Under claude its verdict is TYPED: --json-schema
+# templates/verdict.schema.json → result.structured_output (grep is only the fallback).
 #
 #   loop verify plans/002-auth-v2.md
 set -uo pipefail
@@ -34,7 +35,8 @@ $(cat "$plan")
 Run each \`## Acceptance\` check HERE. For scope, judge ONLY the committed diff vs
 ${BASE_BRANCH:-main} (\`git diff ${BASE_BRANCH:-main}...loop/$slug\`, saved at
 $LOOP_LOGS/$slug.diff) — IGNORE generated/untracked files (e.g. __pycache__,
-*.pyc, build output) created by running the checks. Return the JSON verdict.
+*.pyc, build output) created by running the checks. Return the JSON verdict
+(plan, verdict PASS|FAIL, scope_ok, items[{check, pass, evidence}]).
 PROMPT
 
 # The verifier must actually RUN the acceptance commands (not just inspect), or "trust
@@ -44,14 +46,16 @@ PROMPT
 # already allows running commands.)
 vfile="$LOOP_LOGS/$slug.verdict.json"
 ( cd "$wt" && PERMISSION_MODE=bypassPermissions CODEX_SANDBOX=workspace-write \
+    LOOP_JSON_SCHEMA="$LOOP_HOME/templates/verdict.schema.json" \
     adapter_run verifier "$prompt" "$vfile" )
 git worktree remove --force "$wt" 2>/dev/null || true
 cat "$vfile"
 
 # Make the verdict machine-readable so the closed loop (integrate.sh) can act on it.
-# Exit code is the SIGNAL: 0=PASS, 1=FAIL, 2=ERROR (couldn't read a verdict). The raw
-# auditor result is also dropped at <slug>.feedback so a retry executor sees exactly
-# what was wrong, in the auditor's own words.
+# Exit code is the SIGNAL: 0=PASS, 1=FAIL, 2=ERROR (couldn't read a verdict). On FAIL the
+# fix list is dropped at <slug>.feedback so a retry executor sees exactly what was wrong:
+# the failed items[] (check + evidence) + scope note from the typed verdict, else the
+# auditor's raw result text (verdict_feedback in lib.sh).
 verdict="$(plan_verdict "$vfile")"
 log "[verify] $slug verdict=$verdict"
 
@@ -66,9 +70,7 @@ tail -1 "$LOOP_LOGS/calls.jsonl" 2>/dev/null > "$tdir/meta-$nn.json" || true
 [ "${TRANSCRIPT_RAW:-0}" = "1" ] && cp "$vfile" "$tdir/verify-$nn-verifier.raw.json"
 case "$verdict" in
   PASS) exit 0 ;;
-  FAIL) python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("result",""))' \
-          "$vfile" 2>/dev/null > "$LOOP_LOGS/$slug.feedback" || \
-          cp "$vfile" "$LOOP_LOGS/$slug.feedback"
+  FAIL) verdict_feedback "$vfile" > "$LOOP_LOGS/$slug.feedback"
         exit 1 ;;
   *)    exit 2 ;;
 esac

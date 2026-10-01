@@ -78,15 +78,78 @@ set_status() {
   sed -i.bak -E "s/^status:.*/status: $v/" "$f" && rm -f "$f.bak"
 }
 
-# plan_verdict <verdict-log> — echo PASS | FAIL | ERROR by scanning the verifier's
-# JSON result. Dependency-free: the embedded verdict survives JSON-escaping as
-# verdict"…"pass, so a loose proximity match is robust whether or not jq is present.
+# _verdict_py <mode> <verdict-log> — read the verifier's TYPED verdict: the claude result
+# object's `structured_output` (validated against templates/verdict.schema.json via
+# --json-schema). mode=verdict → PASS|FAIL, mode=feedback → fix list; rc 1 (no output)
+# when there is no usable structured_output (codex, old logs, parse failure).
+_verdict_py() {
+  VP_MODE="$1" VP_LOG="$2" VP_HOME="$LOOP_HOME" python3 - <<'PY' 2>/dev/null
+import os, sys
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.path.join(os.environ["VP_HOME"], "lib"))
+from transcript import claude_result
+d = claude_result(open(os.environ["VP_LOG"], errors="replace").read()) or {}
+so = d.get("structured_output")
+if not isinstance(so, dict) or so.get("verdict") not in ("PASS", "FAIL"):
+    sys.exit(1)
+items = [i for i in (so.get("items") or []) if isinstance(i, dict)]
+failed = [i for i in items if i.get("pass") is not True]
+scope_ok = so.get("scope_ok")
+if os.environ["VP_MODE"] == "verdict":
+    v = so["verdict"]
+    # Never a false PASS: a PASS that contradicts its own items/scope is a FAIL.
+    if v == "PASS" and (failed or scope_ok is False):
+        v = "FAIL"
+    print(v)
+else:
+    out = [f"Verifier verdict: {so['verdict']} (scope_ok: {str(scope_ok).lower()})"]
+    if failed:
+        out.append("Failed checks:")
+        for i in failed:
+            out.append(f"- {i.get('check', '?')}")
+            out.append(f"  evidence: {i.get('evidence', '')}")
+    if scope_ok is False:
+        out.append("Scope: the verifier found OUT-OF-SCOPE changes in the diff — revert anything the plan's Constraints do not allow.")
+    print("\n".join(out))
+PY
+}
+
+# plan_verdict <verdict-log> — echo PASS | FAIL | ERROR.
+# 1st: the typed verdict (structured_output, claude --json-schema). A PASS whose own items
+#      or scope_ok disagree is downgraded to FAIL.
+# 2nd (fallback — codex, or no structured_output): a dependency-free grep; the embedded
+#      verdict survives JSON-escaping as verdict"…"pass, so a loose proximity match works.
+# Logs which path decided ("[verify] verdict via structured_output" / "via grep fallback").
 plan_verdict() {
+  local vf="$1" v
+  [ -s "$vf" ] || { log "[verify] verdict: empty log → ERROR"; echo ERROR; return; }
+  if v="$(_verdict_py verdict "$vf")" && [ -n "$v" ]; then
+    log "[verify] verdict via structured_output: $v"; echo "$v"; return
+  fi
+  # FAIL is checked first: a log mentioning both (e.g. quoting an earlier verdict) is a FAIL.
+  if   grep -qiE 'verdict[\\":[:space:]]+fail' "$vf"; then v=FAIL
+  elif grep -qiE 'verdict[\\":[:space:]]+pass' "$vf"; then v=PASS
+  else v=ERROR; fi
+  log "[verify] verdict via grep fallback: $v"; echo "$v"
+}
+
+# verdict_feedback <verdict-log> — the retry fix list for <slug>.feedback: failed items
+# (check + evidence) + scope note from structured_output; else the raw result text;
+# else the whole log.
+verdict_feedback() {
   local vf="$1"
-  [ -s "$vf" ] || { echo ERROR; return; }
-  if   grep -qiE 'verdict[\\":[:space:]]+pass' "$vf"; then echo PASS
-  elif grep -qiE 'verdict[\\":[:space:]]+fail' "$vf"; then echo FAIL
-  else echo ERROR; fi
+  _verdict_py feedback "$vf" && return 0
+  VP_LOG="$vf" VP_HOME="$LOOP_HOME" python3 - <<'PY' 2>/dev/null && return 0
+import os, sys
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.path.join(os.environ["VP_HOME"], "lib"))
+from transcript import claude_result
+d = claude_result(open(os.environ["VP_LOG"], errors="replace").read())
+if not d or not d.get("result"):
+    sys.exit(1)
+print(d["result"])
+PY
+  cat "$vf"
 }
 
 # adapter_path — echo the adapter file for $LOOP_TOOL, or die (exit 2) with a clear

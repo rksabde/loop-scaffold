@@ -164,7 +164,8 @@ while :; do
   while [ "$attempt" -le "$ATTEMPTS" ]; do
     log "[integrate] $slug — executor attempt $attempt/$ATTEMPTS (plan v$((replan_n + 1)))"
     bash "$LOOP_HOME/lib/run-plan.sh" "$plan" || true   # verdict, not exit code, decides
-    if bash "$LOOP_HOME/lib/verify.sh" "$plan" >/dev/null 2>&1; then passed=1; break; fi
+    # verify's log lines (incl. which verdict path decided) → .loop/logs/<slug>.verify.log
+    if bash "$LOOP_HOME/lib/verify.sh" "$plan" >/dev/null 2>>"$LOOP_LOGS/$slug.verify.log"; then passed=1; break; fi
     attempt=$((attempt + 1))                  # verify.sh wrote $fbfile; next run consumes it
   done
 
