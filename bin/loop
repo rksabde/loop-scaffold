@@ -31,7 +31,8 @@ Run from inside your project's git checkout (any worktree of it works).
   doctor                    check tools, project config, auth + provider reachability
   version                   print the tool version (git tag + short sha of LOOP_HOME)
   self-update               fast-forward LOOP_HOME from its git remote
-  init | migrate            (coming in plan 011)
+  init [dir] [--ci]         write project config + plans scaffolding (skip-if-exists; no scripts)
+  migrate [dir] [--dry-run] [--force]   de-vendor an old vendored loop/ install (changes left staged)
   help                      this text
 
 LOOP_HOME=$LOOP_HOME
@@ -56,7 +57,7 @@ _doctor() {
   done
   if root="$(git worktree list --porcelain 2>/dev/null | sed -n '1s/^worktree //p')" && [ -n "$root" ]; then
     ok "LOOP_PROJECT_ROOT = $root"
-    if [ -f "$root/loop.conf" ]; then ok "loop.conf present"; else fail "loop.conf missing in $root (loop init — plan 011)"; fi
+    if [ -f "$root/loop.conf" ]; then ok "loop.conf present"; else fail "loop.conf missing in $root (run: loop init)"; fi
     # endpoint overrides come from the project's .env (values only read, never printed except host)
     [ -f "$root/.env" ] && eval "$(grep -E '^(OLLAMA_HOST|LOCAL_MODEL)=' "$root/.env" 2>/dev/null)"
   else
@@ -86,7 +87,8 @@ case "$cmd" in
   doctor)      _doctor ;;
   version|--version|-V) _version ;;
   self-update) git -C "$LOOP_HOME" pull --ff-only && _version ;;
-  init|migrate) echo "loop $cmd: not implemented yet (plan 011)" >&2; exit 2 ;;
+  init)        exec bash "$LOOP_HOME/lib/init.sh" "$@" ;;
+  migrate)     exec bash "$LOOP_HOME/lib/migrate.sh" "$@" ;;
   help|-h|--help) usage ;;
   *)           echo "loop: unknown command '$cmd'" >&2; usage >&2; exit 2 ;;
 esac

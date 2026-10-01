@@ -106,7 +106,7 @@ S="LOOP_ADAPTER_FILE=$STUB_DIR/adapter.sh"
 # ═══ 1. CLI surface ══════════════════════════════════════════════════════════
 check "cli: version prints a sha"           bash -c "'$LOOP' version | grep -qE '\\([0-9a-f]{7,}\\)'"
 check "cli: unknown subcommand → exit 2"    bash -c "'$LOOP' bogus; [ \$? -eq 2 ]"
-check "cli: init stub → exit 2"             bash -c "'$LOOP' init; [ \$? -eq 2 ]"
+check "cli: init outside a git repo → exit 1" bash -c "mkdir -p '$T/nogit' && cd '$T/nogit' && '$LOOP' init; [ \$? -eq 1 ]"
 check "cli: outside a git repo → exit 1"    bash -c "cd '$T' && '$LOOP' fleet; [ \$? -eq 1 ]"
 
 # ═══ 2. path model ═══════════════════════════════════════════════════════════
