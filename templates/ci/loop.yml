@@ -31,7 +31,7 @@ jobs:
       - name: Install Claude Code + the loop tool
         run: |
           npm i -g @anthropic-ai/claude-code
-          git clone --depth 1 -b "$LOOP_REF" https://github.com/rksabde/loop-scaffold ~/.loop-scaffold
+          git clone --depth 1 -b "${LOOP_REF:-main}" https://github.com/rksabde/loop-scaffold ~/.loop-scaffold
           echo "$HOME/.loop-scaffold/bin" >> "$GITHUB_PATH"
 
       # Install your project's toolchain here (node/python/etc.)
@@ -41,7 +41,9 @@ jobs:
 
       - name: Run triage (intake + fleet)
         env:
+          # set ONE of these repo secrets (subscription token, or API key)
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           git config user.name  "agent-loop"
           git config user.email "agent-loop@users.noreply.github.com"

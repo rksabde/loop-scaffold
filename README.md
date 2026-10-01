@@ -11,8 +11,8 @@ machine (`LOOP_HOME`); projects hold only their own config and data (`loop.conf`
 
 ## Layout (`LOOP_HOME`)
 ```
-bin/loop        single entrypoint: fleet | run | verify | integrate | intake | triage | schedule | doctor | version
-lib/            the harness scripts (fleet, run-plan, verify, integrate, intake, triage, schedule, gate) + tests/
+bin/loop        single entrypoint: init | migrate | fleet | run | verify | integrate | intake | triage | schedule | doctor | version
+lib/            the harness scripts (init, migrate, fleet, run-plan, verify, integrate, intake, triage, schedule, gate) + tests/
 adapters/       claude.sh, codex.sh — tool-specific invocation behind the engine seam
 plugin/         Claude Code plugin attached per worker (--plugin-dir): agents/ roles + hooks/ edit gate
 templates/      what `loop init` writes into a project: loop.conf, .env.example, plans/, ci/loop.yml,
@@ -39,9 +39,21 @@ loop version && loop doctor
 
 # 2. in a project (a git repo): write config + plans scaffolding
 cd /path/to/your/repo
-loop init                  # (coming in plan 011 — until then copy templates/loop.conf + templates/plans/)
+loop init                  # loop.conf, .env.example, plans/{README,000-EXAMPLE,PROGRESS}.md,
+                           # lean AGENTS.md + CLAUDE.md if absent, .gitignore block — skip-if-exists,
+                           # re-run is a no-op; NO scripts/agents/hooks land in the repo
+loop init --ci             # ...also .github/workflows/loop.yml (clones the tool in CI)
 $EDITOR loop.conf          # LINT_CMD, TEST_CMD, (TYPECHECK_CMD) — the ONLY required edit
-cp ~/.loop-scaffold/templates/.env.example .env   # optional: engine routing per role
+cp .env.example .env       # optional: engine routing per role (gitignored)
+
+# 2b. upgrading a repo that has the OLD vendored install (root loop/, .loop-scaffold/,
+#     .claude/agents/{engineer,verifier,researcher,planner}.md, the gate hook, LOOPS.md):
+loop migrate --dry-run     # prints every planned action ("would: …"), changes nothing
+loop migrate               # needs a clean tree (or --force); removes the vendored copy,
+                           # strips @LOOPS.md + the AGENTS.md pointer block + the gate hook
+                           # (other hooks/agents kept), moves loop/{logs,state} → .loop/,
+                           # refreshes our stock CI workflow, then runs init. Changes are
+                           # left STAGED — review with git diff --cached, then commit.
 
 # 3. write a plan (see templates/plans/README.md for the format)
 $EDITOR plans/001-thing.md # status: ready + verifiable Acceptance
@@ -118,4 +130,5 @@ issue, per TODO cluster). Drafts always wait for a human `draft → ready` promo
   the harness commits with `git add -A`, and the verifier flags out-of-scope files.
 - Command flags evolve; if one errors, check `claude --help` and adjust `loop.conf`.
 - Runtime state lives in the project's `.loop/` (logs, call log, cooldowns, merge lock) —
-  self-gitignored. Tests: `bash lib/tests/stub-suite.sh` (stubbed LLM, ~10 s, no spend).
+  self-gitignored. Tests: `bash lib/tests/stub-suite.sh` (stubbed LLM, ~10 s, no spend) and
+  `bash lib/tests/init-migrate.sh` (init + migrate against a copy of an old vendored repo).
