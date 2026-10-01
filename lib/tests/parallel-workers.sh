@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# loop/tests/parallel-workers.sh — does sharing ~/.claude across PARALLEL headless
+# lib/tests/parallel-workers.sh — does sharing ~/.claude across PARALLEL headless
 # workers corrupt session state? (The open question behind MAX_PARALLEL.)
 # RUN THIS FROM YOUR OWN TERMINAL — a nested/sandboxed context has no keychain access
 # and every call fails with "Not logged in".
 #
-#   ./loop/tests/parallel-workers.sh [N-parallel] [rounds]     # default 3 x 2
+#   ./lib/tests/parallel-workers.sh [N-parallel] [rounds]     # default 3 x 2
 #
 # Verdict: prints CLEAN (parallel workers safe) or DIRTY (isolate before MAX_PARALLEL>1).
 set -uo pipefail

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# loop/tests/probe-cli.sh — answers the six CLI unknowns the machine-installed design
+# lib/tests/probe-cli.sh — answers the six CLI unknowns the machine-installed design
 # depends on (docs/SPEC-distribution-and-harness.md §7). Prints exactly six "PROBE n:"
 # result lines (+ indented detail). RUN FROM YOUR OWN LOGGED-IN TERMINAL — nested or
 # sandboxed contexts fail "Not logged in". Spend: a handful of haiku "pong"-sized calls.
 #
-#   ./loop/tests/probe-cli.sh                 # full run
-#   PROBE_OFFLINE=1 ./loop/tests/probe-cli.sh # build + validate the probe plugin only
+#   ./lib/tests/probe-cli.sh                 # full run
+#   PROBE_OFFLINE=1 ./lib/tests/probe-cli.sh # build + validate the probe plugin only
 #
 # Never prints secrets: the OpenRouter key is fed to curl via stdin config, and only
 # extracted fields (status, type, first chars of text) are ever echoed.

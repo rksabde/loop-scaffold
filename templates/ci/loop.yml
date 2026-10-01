@@ -1,9 +1,10 @@
 name: agent-loop
-# Unattended mode (GitHub Actions). triage.sh runs INTAKE (inbox → draft plans) then
+# Unattended mode (GitHub Actions). `loop triage` runs INTAKE (inbox → draft plans) then
 # the FLEET (status: ready plans only — drafts wait for human review). The local
-# equivalent is `loop/schedule.sh install` (launchd/cron).
-# Requires a repo secret with auth for your LOOP_TOOL (ANTHROPIC_API_KEY for claude,
-# OPENAI_API_KEY for codex, etc.).
+# equivalent is `loop schedule install` (launchd/cron).
+# The loop TOOL is not vendored in this repo: CI clones it (pin LOOP_REF to a tag).
+# Requires a repo secret with auth for your LOOP_TOOL: CLAUDE_CODE_OAUTH_TOKEN (from
+# `claude setup-token`, subscription) or ANTHROPIC_API_KEY for claude; OPENAI_API_KEY for codex.
 # NOTE: across fresh CI runners, intake's .intake.sha markers (gitignored, local) don't
 # persist → intake re-plans each run. For CI idempotency, commit portable markers (follow-up).
 
@@ -16,6 +17,9 @@ concurrency:
   group: agent-loop
   cancel-in-progress: false      # never run two fleets at once
 
+env:
+  LOOP_REF: main                 # pin to a loop-scaffold tag for reproducible runs
+
 jobs:
   loop:
     runs-on: ubuntu-latest
@@ -24,26 +28,29 @@ jobs:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }   # full history for worktrees/diffs
 
-      - name: Install Claude Code
-        run: npm i -g @anthropic-ai/claude-code
+      - name: Install Claude Code + the loop tool
+        run: |
+          npm i -g @anthropic-ai/claude-code
+          git clone --depth 1 -b "$LOOP_REF" https://github.com/rksabde/loop-scaffold ~/.loop-scaffold
+          echo "$HOME/.loop-scaffold/bin" >> "$GITHUB_PATH"
 
       # Install your project's toolchain here (node/python/etc.)
       # - uses: actions/setup-node@v4
       #   with: { node-version: 20 }
       # - run: npm ci
 
-      - name: Run fleet
+      - name: Run triage (intake + fleet)
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           git config user.name  "agent-loop"
           git config user.email "agent-loop@users.noreply.github.com"
-          chmod +x loop/*.sh
-          ./loop/triage.sh
+          loop doctor || true
+          loop triage
 
       - name: Push loop branches
         run: git push origin --all || true
 
       - uses: actions/upload-artifact@v4
         if: always()
-        with: { name: loop-logs, path: loop/logs/ }
+        with: { name: loop-logs, path: .loop/logs/, include-hidden-files: true }

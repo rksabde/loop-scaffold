@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "loop verifier verdict",
+  "type": "object",
+  "properties": {
+    "plan": { "type": "string" },
+    "verdict": { "type": "string", "enum": ["PASS", "FAIL"] },
+    "scope_ok": { "type": "boolean" },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "check": { "type": "string" },
+          "pass": { "type": "boolean" },
+          "evidence": { "type": "string" }
+        },
+        "required": ["check", "pass", "evidence"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["plan", "verdict", "scope_ok", "items"],
+  "additionalProperties": false
+}

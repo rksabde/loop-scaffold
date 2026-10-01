@@ -39,3 +39,20 @@ Rules that keep the loop honest:
 - `PROGRESS.md` here is **harness-owned** (one line per run) — agents never write it.
 - `worktree:` slug names the branch (`loop/NNN-<slug>`) and the worktree dir
   (`$WORKTREE_DIR/<repo>-NNN-<slug>`).
+
+## Runtime dir: `.loop/` (never committed)
+The `loop` tool keeps machine-local runtime state in `<project>/.loop/` (main checkout;
+it carries its own `.gitignore` of `*`, so it is never committed even if the project
+`.gitignore` misses it):
+
+| path | what |
+|---|---|
+| `.loop/logs/calls.jsonl` | one JSON line per worker call: requested engine vs the model that actually answered, cost, turns |
+| `.loop/logs/<slug>.json` / `.prompt` / `.verdict.json` / `.diff` | last executor log + prompt, verifier result, audited diff |
+| `.loop/logs/<slug>.feedback` | the verifier's FAIL verdict, fed to the next executor attempt |
+| `.loop/logs/cron.log` | output of the scheduled (`loop schedule`) runs |
+| `.loop/state/<provider>.cooldown` | rate-limited provider parked until this epoch (failover) |
+| `.loop/state/<slug>.pid`, `merge.lock/` | crash recovery + the merge mutex for parallel workers |
+
+What IS committed: `plans/` (incl. `PROGRESS.md`, `*.blocked.md`) and `.transcripts/<slug>/`
+(the LLM transcripts that ride inside the commits they produced).
