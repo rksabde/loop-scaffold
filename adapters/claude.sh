@@ -21,13 +21,15 @@
 #   env LOOP_WORKER=1 LOOP_HOME LOOP_PROJECT_ROOT    arms the gate (no-op without LOOP_WORKER=1)
 #
 # --bare (glm/local only — hermetic, ~32k fewer context tokens per call; spec §7.5):
-#   `claude --help` says --bare skips hooks and plugin sync but still honours an explicit
-#   --plugin-dir. Probed 2026-10-01 (Claude Code 2.1.233, plan 010 Progress):
-#     * WITHOUT --bare, --plugin-dir + LOOP_WORKER=1: gate hook FIRED (marker written).
-#     * WITH --bare --plugin-dir: see LOOP_BARE_EXECUTOR below for the recorded outcome.
-#   Policy: --bare for glm/local on every role EXCEPT the executor ('engineer') unless
-#   LOOP_BARE_EXECUTOR=1, because the executor is the role that needs the edit gate.
-#   verifier/planner never edit through the gate, so they always take --bare on 3P engines.
+#   Probed 2026-10-01, Claude Code 2.1.233 (plan 010 Progress), prompt "Write probe.txt",
+#   LOOP_WORKER=1, --plugin-dir $LOOP_HOME/plugin, gate writes .loop/gate-fired:
+#     * WITHOUT --bare (frontier/sonnet, subscription token): Write ran, gate hook FIRED.
+#     * WITH --bare + OAuth token: auth refused ("OAuth session expired") — --bare never
+#       reads OAuth (claude --help), so frontier can never be --bare.
+#     * WITH --bare via direct Ollama (gpt-oss:20b): Write ran (probe.txt created) but the
+#       gate hook did NOT fire — --bare loads --plugin-dir yet skips its hooks.
+#   Policy: --bare for glm/local on every role EXCEPT the executor ('engineer'), which is the
+#   role that needs the edit gate. verifier/planner don't edit through the gate → --bare.
 
 source "$(dirname "${BASH_SOURCE[0]}")/../lib/engine.sh"
 
@@ -37,7 +39,6 @@ LOCAL_MODEL="${LOCAL_MODEL:-gpt-oss:20b}"
 OPENROUTER_BASE_URL="${OPENROUTER_BASE_URL:-https://openrouter.ai/api}"
 OPENROUTER_KEY_FILE="${OPENROUTER_KEY_FILE:-$HOME/.config/openrouter/key}"
 CLAUDE_TOKEN_FILE="${CLAUDE_TOKEN_FILE:-$HOME/.config/claude/oauth-token}"
-LOOP_BARE_EXECUTOR="${LOOP_BARE_EXECUTOR:-0}"
 
 # (provider, tier) -> the value for `claude --model`
 _claude_model() {
@@ -60,10 +61,10 @@ _claude_transport() {
   esac
 }
 
-# Should this call run --bare? (3P engines only; executor only when opted in)
+# Should this call run --bare? (3P engines only; never the executor — hooks don't fire under --bare)
 _claude_bare() {    # provider -> 0 (yes) / 1 (no)
   case "$1" in glm|local) ;; *) return 1 ;; esac
-  [ "${ENGINE_ROLE:-}" = "engineer" ] && [ "$LOOP_BARE_EXECUTOR" != "1" ] && return 1
+  [ "${ENGINE_ROLE:-}" = "engineer" ] && return 1
   return 0
 }
 
