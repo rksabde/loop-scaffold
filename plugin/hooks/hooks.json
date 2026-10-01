@@ -1,0 +1,13 @@
+{
+  "description": "Inner self-correction gate: lint/test/typecheck after every edit. No-op unless LOOP_WORKER=1.",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          { "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/../lib/gate.sh\"" }
+        ]
+      }
+    ]
+  }
+}

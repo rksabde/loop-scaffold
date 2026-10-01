@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# loop/adapters/codex.sh — OpenAI Codex adapter for the engine seam.
-# The chain-walk (adapter_run) lives ONCE in loop/engine.sh; this file provides only
+# adapters/codex.sh — OpenAI Codex adapter for the engine seam.
+# The chain-walk (adapter_run) lives ONCE in lib/engine.sh; this file provides only
 # the Codex-specific pieces of the contract documented there.
 #
 # Codex is OpenAI-native, so OpenAI-format providers go DIRECT — no ccr shim:
@@ -10,14 +10,14 @@
 #              then add a case below). Treated as unavailable so chains skip it.
 #
 # Cross-tool caveats (the loop SHAPE transfers; Claude-only niceties don't):
-#   - `.claude/agents/*.md` subagents and the `.claude/settings.json` PostToolUse gate are
-#     no-ops under Codex. The executor still edits in its worktree and the harness commits;
+#   - The loop plugin (plugin/agents/*.md roles + the PostToolUse gate in plugin/hooks/)
+#     is Claude-only — a no-op under Codex. The executor still edits in its worktree and the harness commits;
 #     the verifier runs from its prompt without a formal subagent (and is sandbox-bounded,
 #     not tool-restricted read-only).
 #   - Codex headless = `codex exec`, output is JSONL (`--json`) + last message (`-o`).
 #   - No `--max-budget-usd` equivalent; bound via the task + sandbox, not a $ cap.
 
-source "$(dirname "${BASH_SOURCE[0]}")/../engine.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../lib/engine.sh"
 
 ADAPTER_TOOL="codex"
 OLLAMA_HOST="${OLLAMA_HOST:-localhost:11434}"
@@ -60,8 +60,9 @@ adapter_invoke() {                # provider tier prompt logfile
   flags="$(_codex_flags "$1" "$2")"
   sandbox="-s ${CODEX_SANDBOX:-workspace-write}"
   [ "${CODEX_FULL_AUTO:-0}" = "1" ] && sandbox="--dangerously-bypass-approvals-and-sandbox"
-  ${TIMEOUT_BIN:+$TIMEOUT_BIN "${TIMEOUT:-35m}"} \
-    codex exec "$3" $flags $sandbox \
-      --skip-git-repo-check -C "$PWD" --json -o "$4.last" \
-      < /dev/null > "$4" 2>&1
+  ( export LOOP_WORKER=1 LOOP_HOME LOOP_PROJECT_ROOT
+    ${TIMEOUT_BIN:+$TIMEOUT_BIN "${TIMEOUT:-35m}"} \
+      codex exec "$3" $flags $sandbox \
+        --skip-git-repo-check -C "$PWD" --json -o "$4.last" \
+        < /dev/null > "$4" 2>&1 )
 }

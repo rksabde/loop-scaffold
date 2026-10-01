@@ -1,0 +1,9 @@
+{
+  "name": "loop",
+  "version": "0.1.0",
+  "description": "Self-correcting agent loops: engineer/verifier/researcher/planner roles and the inner edit gate (lib/gate.sh), attached per worker by the loop tool via --plugin-dir.",
+  "author": {
+    "name": "rksabde"
+  },
+  "repository": "https://github.com/rksabde/loop-scaffold"
+}
