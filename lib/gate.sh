@@ -2,7 +2,16 @@
 # lib/gate.sh — inner self-correction gate.
 # Wired as the PostToolUse hook of the loop plugin (plugin/hooks/hooks.json), which the
 # claude adapter attaches to every worker via --plugin-dir. Runs the configured
-# lint/test/typecheck after each agent edit; non-zero exit surfaces the failure in the turn.
+# lint/test/typecheck after each agent edit.
+#
+# Exit codes (Claude Code PostToolUse semantics): 0 = pass. On failure we exit 2 with the
+# failing commands' output on STDERR — exit 2 is the code whose stderr Claude Code feeds
+# back to the MODEL; exit 1 only shows it to the user, so the executor never saw the
+# failure (finding from plan 010). VERIFIED 2026-10-01 (Claude Code 2.1.233, plan 014): plain
+# exit 2 + stderr is enough — no JSON {"decision":"block"} needed. Real frontier/sonnet run as
+# --agent engineer with TEST_CMD='test -f must-exist.txt', told only "create hello.txt; if a hook
+# reports a failing check, create whatever file it says is missing": it created must-exist.txt
+# (a name it could only learn from this hook's stderr) in 5 turns, $0.096.
 #
 # Guard: a NO-OP (exit 0, no git/config work) unless LOOP_WORKER=1 — the plugin may also be
 # installed for interactive sessions, where the gate stays off (interactive opt-in = plan 015).
@@ -22,10 +31,23 @@ if [ -n "${LOOP_PROJECT_ROOT:-}" ] && [ -d "$LOOP_PROJECT_ROOT/.loop" ]; then
 fi
 
 rc=0
-run() { [ -n "${1:-}" ] || return 0; echo "› $1"; (cd "$DIR" && eval "$1") || rc=1; }
+out=""
+run() {
+  [ -n "${1:-}" ] || return 0
+  local o
+  if ! o="$( (cd "$DIR" && eval "$1") 2>&1 )"; then
+    rc=2
+    out="${out}loop gate FAILED: \`$1\`
+${o:-(no output)}
+"
+  fi
+}
 
 run "${LINT_CMD:-}"
 run "${TEST_CMD:-}"
 run "${TYPECHECK_CMD:-}"
 
+if [ "$rc" -ne 0 ]; then
+  printf '%s\nFix the failing check(s) above before continuing.\n' "$out" >&2
+fi
 exit "$rc"

@@ -124,10 +124,14 @@ printf 'TEST_CMD="false"\n' > "$R/loop.conf.fail"
 cp "$R/loop.conf" "$R/loop.conf.orig"; cp "$R/loop.conf.fail" "$T/paths-wt/loop.conf"
 check "gate: no-op without LOOP_WORKER (even with a failing TEST_CMD)" \
   bash -c "cd '$T/paths-wt' && bash '$LOOP_HOME/lib/gate.sh'"
-check "gate: LOOP_WORKER=1 runs the WORKTREE's own loop.conf (TEST_CMD=false → non-zero)" \
-  bash -c "cd '$T/paths-wt' && ! LOOP_WORKER=1 LOOP_PROJECT_ROOT='$R' bash '$LOOP_HOME/lib/gate.sh'"
-check "gate: LOOP_WORKER=1 passes with main's empty commands + writes heartbeat" \
-  bash -c "cd '$R' && mkdir -p .loop && LOOP_WORKER=1 LOOP_PROJECT_ROOT='$R' bash '$LOOP_HOME/lib/gate.sh' && test -s .loop/gate-fired"
+check "gate: LOOP_WORKER=1 runs the WORKTREE's own loop.conf (TEST_CMD=false → exit 2)" \
+  bash -c "cd '$T/paths-wt' && LOOP_WORKER=1 LOOP_PROJECT_ROOT='$R' bash '$LOOP_HOME/lib/gate.sh'; [ \$? -eq 2 ]"
+check "gate: failure output (the failing command) goes to STDERR, stdout empty" \
+  bash -c "cd '$T/paths-wt' && LOOP_WORKER=1 LOOP_PROJECT_ROOT='$R' bash '$LOOP_HOME/lib/gate.sh' >'$T/g.out' 2>'$T/g.err'; [ ! -s '$T/g.out' ] && grep -q 'loop gate FAILED: .false.' '$T/g.err'"
+check "gate: no-op is instant (<1s) and writes no heartbeat without LOOP_WORKER" \
+  bash -c "cd '$T/paths-wt' && mkdir -p '$T/hb/.loop' && s=\$(date +%s) && LOOP_PROJECT_ROOT='$T/hb' bash '$LOOP_HOME/lib/gate.sh' && [ \$(( \$(date +%s) - s )) -le 1 ] && test ! -e '$T/hb/.loop/gate-fired'"
+check "gate: LOOP_WORKER=1 passes (exit 0) with main's empty commands + writes heartbeat" \
+  bash -c "cd '$R' && mkdir -p .loop && LOOP_WORKER=1 LOOP_PROJECT_ROOT='$R' bash '$LOOP_HOME/lib/gate.sh'; [ \$? -eq 0 ] && test -s .loop/gate-fired"
 
 # ═══ 4. dry-run routing (REAL claude adapter, no LLM) + call log ═════════════
 R="$(mkrepo dry 001-d:ready)"
