@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""loop/transcript.py — render a worker log to a readable markdown transcript.
+"""lib/transcript.py — render a worker log to a readable markdown transcript.
 
 Understands: claude `--output-format json` (one result object) and codex `--json`
 (JSONL events). Tolerant of unknown shapes: falls back to dumping text-ish fields.
 Never raises for the loop's sake — worst case it emits a stub note.
 
-  python3 loop/transcript.py <logfile> [--prompt <promptfile>] [--role engineer] [--title T]
+  python3 lib/transcript.py <logfile> [--prompt <promptfile>] [--role engineer] [--title T]
 """
 import argparse
 import json
@@ -48,7 +48,7 @@ def render_jsonl(raw, out):
             out.append(f"**{typ}**\n\n{text}\n")
             n += 1
     if not n:
-        out.append("(no renderable events — see the raw log under loop/logs/)")
+        out.append("(no renderable events — see the raw log under .loop/logs/)")
 
 
 def main():

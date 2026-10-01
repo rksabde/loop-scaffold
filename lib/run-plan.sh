@@ -1,21 +1,21 @@
 #!/usr/bin/env bash
-# loop/run-plan.sh — execute ONE plan to its verifiable goal, in an
+# lib/run-plan.sh — execute ONE plan to its verifiable goal, in an
 # isolated git worktree, headless, with hard budget caps.
 #
-#   ./loop/run-plan.sh plans/002-auth-v2.md
+#   loop run plans/002-auth-v2.md
 set -uo pipefail
-source "$(dirname "$0")/lib.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 require git
-# engine seam: LOOP_TOOL selects the adapter (claude | codex | opencode)
-source "$(dirname "$0")/adapters/${LOOP_TOOL:-claude}.sh"
+# engine seam: LOOP_TOOL selects the adapter (claude | codex)
+load_adapter
 
-plan="${1:?usage: run-plan.sh plans/NNN-name.md}"
+plan="${1:?usage: loop run plans/NNN-name.md}"
 slug="$(basename "$plan" .md)"
-export LOOP_PLAN_SLUG="$slug"     # attributes loop/logs/calls.jsonl lines to this plan
+export LOOP_PLAN_SLUG="$slug"     # attributes .loop/logs/calls.jsonl lines to this plan
 repo="$SCAFFOLD_ROOT"
 wt="$(worktree_path "$slug")"
 branch="loop/$slug"
-mkdir -p "$repo/loop/logs"
+logs="$LOOP_LOGS"
 
 log "[$slug] worktree → $wt   branch → $branch"
 git -C "$repo" worktree add -B "$branch" "$wt" "${BASE_BRANCH:-main}" 2>/dev/null \
@@ -27,7 +27,7 @@ git -C "$repo" worktree add -B "$branch" "$wt" "${BASE_BRANCH:-main}" 2>/dev/nul
 # If a prior attempt was rejected by the verifier, integrate.sh leaves its verdict here.
 # Feed it back so this attempt fixes the SPECIFIC findings instead of starting blind.
 feedback=""
-fb="$repo/loop/logs/$slug.feedback"
+fb="$logs/$slug.feedback"
 if [ -s "$fb" ]; then
   feedback="
 
@@ -50,7 +50,7 @@ PROMPT
 (
   cd "$wt" || exit 1
   # The 'engineer' role's engine is resolved from .env (LOOP_ENGINE_ENGINEER / _DEFAULT).
-  adapter_run engineer "$prompt" "$repo/loop/logs/$slug.json"
+  adapter_run engineer "$prompt" "$logs/$slug.json"
   rc=$?
   # The transcript rides INSIDE the commit it documents: the run's log is complete
   # here, so render it into the worktree BEFORE the harness commit picks it up.
@@ -62,12 +62,12 @@ PROMPT
     "bookkeeping commits carry verify-NN-verifier.md + meta-NN.json (verdict + engine/cost)." \
     > .transcripts/README.md
   nn="$(printf '%02d' $(( $(ls "$tdir"/attempt-*-engineer.md 2>/dev/null | wc -l) + 1 )))"
-  printf '%s' "$prompt" > "$repo/loop/logs/$slug.prompt"
-  python3 "$repo/loop/transcript.py" "$repo/loop/logs/$slug.json" \
-      --prompt "$repo/loop/logs/$slug.prompt" --role engineer \
+  printf '%s' "$prompt" > "$logs/$slug.prompt"
+  python3 "$LOOP_HOME/lib/transcript.py" "$logs/$slug.json" \
+      --prompt "$logs/$slug.prompt" --role engineer \
       --title "$slug — attempt $nn (engineer)" > "$tdir/attempt-$nn-engineer.md" 2>/dev/null \
     || log "[$slug] transcript render failed (run continues)"
-  [ "${TRANSCRIPT_RAW:-0}" = "1" ] && cp "$repo/loop/logs/$slug.json" "$tdir/attempt-$nn-engineer.raw.json"
+  [ "${TRANSCRIPT_RAW:-0}" = "1" ] && cp "$logs/$slug.json" "$tdir/attempt-$nn-engineer.raw.json"
 
   # Harness commits whatever the agent changed, so the branch carries a diff the
   # verifier can audit — reliable regardless of headless permission mode (which
@@ -82,6 +82,6 @@ PROMPT
     "$slug" "$rc" "$(date +%FT%T)" "$branch" \
     "${ENGINE_LAST_ENGINE:--}" "${ENGINE_LAST_MODEL:--}" "${ENGINE_LAST_COST:--}" \
     >> "$repo/plans/PROGRESS.md"
-  log "[$slug] finished exit=$rc  (log: loop/logs/$slug.json)"
+  log "[$slug] finished exit=$rc  (log: .loop/logs/$slug.json)"
   exit $rc
 )

@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# bin/loop — the single entrypoint of the machine-installed loop tool (spec §5.1).
+#
+#   install:  git clone https://github.com/rksabde/loop-scaffold ~/.loop-scaffold
+#             ln -s ~/.loop-scaffold/bin/loop ~/.local/bin/loop
+#   use:      cd <your project> && loop fleet
+set -uo pipefail
+
+# Resolve LOOP_HOME through any symlink chain (~/.local/bin/loop → <clone>/bin/loop).
+_self="${BASH_SOURCE[0]}"
+while [ -L "$_self" ]; do
+  _d="$(cd -P "$(dirname "$_self")" && pwd)"; _self="$(readlink "$_self")"
+  case "$_self" in /*) ;; *) _self="$_d/$_self" ;; esac
+done
+LOOP_HOME="$(cd -P "$(dirname "$_self")/.." && pwd)"
+export LOOP_HOME
+
+usage() {
+  cat <<USAGE
+usage: loop <command> [args]
+
+Run from inside your project's git checkout (any worktree of it works).
+
+  fleet                     dispatch every 'status: ready' plan (RETRY=1, AUTO_INTEGRATE=1)
+  run <plans/X.md>          execute ONE plan in its worktree (executor only)
+  verify <plans/X.md>       independent pre-merge audit of loop/<slug> (exit 0 PASS/1 FAIL/2 ERROR)
+  integrate <plans/X.md>    closed loop for ONE plan: execute → verify → merge | retry | replan | block
+  intake                    inbox/ artifacts → draft plans (planner agent)
+  triage                    unattended entrypoint: intake, then fleet
+  schedule <install [HH:MM]|uninstall|status|run>   per-repo launchd/cron job
+  doctor                    check tools, project config, auth + provider reachability
+  version                   print the tool version (git tag + short sha of LOOP_HOME)
+  self-update               fast-forward LOOP_HOME from its git remote
+  init | migrate            (coming in plan 011)
+  help                      this text
+
+LOOP_HOME=$LOOP_HOME
+USAGE
+}
+
+_version() {
+  local sha tag
+  sha="$(git -C "$LOOP_HOME" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+  tag="$(git -C "$LOOP_HOME" describe --tags --abbrev=0 2>/dev/null || echo untagged)"
+  printf 'loop %s (%s) %s\n' "$tag" "$sha" "$LOOP_HOME"
+}
+
+_doctor() {
+  local bad=0 root=""
+  ok()   { printf '  ok    %s\n' "$*"; }
+  warn() { printf '  warn  %s\n' "$*"; }
+  fail() { printf '  FAIL  %s\n' "$*"; bad=1; }
+  echo "loop doctor — $(_version)"
+  for t in claude python3 git; do
+    if command -v "$t" >/dev/null 2>&1; then ok "$t on PATH ($(command -v "$t"))"; else fail "$t not on PATH"; fi
+  done
+  if root="$(git worktree list --porcelain 2>/dev/null | sed -n '1s/^worktree //p')" && [ -n "$root" ]; then
+    ok "LOOP_PROJECT_ROOT = $root"
+    if [ -f "$root/loop.conf" ]; then ok "loop.conf present"; else fail "loop.conf missing in $root (loop init — plan 011)"; fi
+    # endpoint overrides come from the project's .env (values only read, never printed except host)
+    [ -f "$root/.env" ] && eval "$(grep -E '^(OLLAMA_HOST|LOCAL_MODEL)=' "$root/.env" 2>/dev/null)"
+  else
+    fail "not inside a git repository (cwd: $PWD) — LOOP_PROJECT_ROOT unresolved"
+  fi
+  # Auth / provider presence — report PRESENCE only, never contents.
+  if [ -s "$HOME/.config/claude/oauth-token" ]; then ok "frontier token file ~/.config/claude/oauth-token present"
+  else warn "no ~/.config/claude/oauth-token (frontier falls back to keychain login; run 'claude setup-token' for headless)"; fi
+  if [ -s "$HOME/.config/openrouter/key" ]; then ok "OpenRouter key file present (glm engine available)"
+  else warn "no ~/.config/openrouter/key (glm engine unavailable)"; fi
+  local oh="${OLLAMA_HOST:-localhost:11434}"
+  if curl -s --max-time 3 "http://$oh/api/tags" >/dev/null 2>&1; then ok "Ollama reachable at $oh (local engine available)"
+  else warn "Ollama not reachable at $oh (local engine unavailable)"; fi
+  [ "$bad" -eq 0 ] && echo "doctor: OK" || echo "doctor: problems found"
+  return "$bad"
+}
+
+cmd="${1:-help}"; [ $# -gt 0 ] && shift
+case "$cmd" in
+  fleet)       exec bash "$LOOP_HOME/lib/fleet.sh" "$@" ;;
+  run)         exec bash "$LOOP_HOME/lib/run-plan.sh" "$@" ;;
+  verify)      exec bash "$LOOP_HOME/lib/verify.sh" "$@" ;;
+  integrate)   exec bash "$LOOP_HOME/lib/integrate.sh" "$@" ;;
+  intake)      exec bash "$LOOP_HOME/lib/intake.sh" "$@" ;;
+  triage)      exec bash "$LOOP_HOME/lib/triage.sh" "$@" ;;
+  schedule)    exec bash "$LOOP_HOME/lib/schedule.sh" "$@" ;;
+  doctor)      _doctor ;;
+  version|--version|-V) _version ;;
+  self-update) git -C "$LOOP_HOME" pull --ff-only && _version ;;
+  init|migrate) echo "loop $cmd: not implemented yet (plan 011)" >&2; exit 2 ;;
+  help|-h|--help) usage ;;
+  *)           echo "loop: unknown command '$cmd'" >&2; usage >&2; exit 2 ;;
+esac

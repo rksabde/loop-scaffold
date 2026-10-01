@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# loop/intake.sh — open-loop discovery. Scan inbox/ for initiative folders whose
+# lib/intake.sh — open-loop discovery. Scan inbox/ for initiative folders whose
 # artifacts are new or changed, and turn each into DRAFT plans via the planner agent.
 # Idempotent: a per-initiative content hash means unchanged folders are skipped, so
 # this is cheap to poll and a change is the natural re-trigger.
 #
-#   ./loop/intake.sh            # scan $INBOX_DIR (default <repo>/inbox)
-#   FORCE=1 ./loop/intake.sh    # re-plan even if unchanged
+#   loop intake            # scan $INBOX_DIR (default <repo>/inbox)
+#   FORCE=1 loop intake    # re-plan even if unchanged
 set -uo pipefail
-source "$(dirname "$0")/lib.sh"
-source "$(dirname "$0")/adapters/${LOOP_TOOL:-claude}.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+load_adapter
 
 INBOX="${INBOX_DIR:-$SCAFFOLD_ROOT/inbox}"
 [ -d "$INBOX" ] || { log "[intake] no $INBOX — nothing to do"; exit 0; }
-mkdir -p "$SCAFFOLD_ROOT/loop/logs" "$SCAFFOLD_ROOT/plans"
+mkdir -p "$SCAFFOLD_ROOT/plans"
 
 # Skip-rule: is this dir machinery/non-initiative rather than a real initiative?
 _skip() {
@@ -44,7 +44,7 @@ tasks and write one draft plan per task into the repo's plans/ directory, follow
 format in plans/README.md. Number plans sequentially AFTER any that already exist in
 plans/. Every plan is status: draft. Write ONLY under plans/.
 PROMPT
-  LOOP_PLAN_SLUG="intake-$name" adapter_run planner "$prompt" "$SCAFFOLD_ROOT/loop/logs/intake-$name.json"
+  LOOP_PLAN_SLUG="intake-$name" adapter_run planner "$prompt" "$LOOP_LOGS/intake-$name.json"
   if [ "${LOOP_DRYRUN:-0}" = "1" ]; then
     log "[intake] (dry-run) would plan '$name' — marker NOT written"
   else

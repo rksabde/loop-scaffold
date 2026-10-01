@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
-# loop/fleet.sh — dispatch every "status: ready" plan in parallel,
+# lib/fleet.sh — dispatch every "status: ready" plan in parallel,
 # one git worktree each, capped at MAX_PARALLEL.
 #
-#   ./loop/fleet.sh              # dispatch ready plans
-#   RETRY=1 ./loop/fleet.sh      # manual mode: also re-run plans whose branch exists
+#   loop fleet              # dispatch ready plans
+#   RETRY=1 loop fleet      # manual mode: also re-run plans whose branch exists
 set -uo pipefail
-source "$(dirname "$0")/lib.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 cd "$SCAFFOLD_ROOT"
+adapter_path >/dev/null || exit 2   # fail fast on a bad LOOP_TOOL (e.g. opencode) before dispatch
 
 # ── sweep: recover plans stranded in 'running' by a killed worker (kill -9 skips
 # integrate.sh's own trap). A running plan whose recorded PID is gone → back to ready.
 for p in plans/*.md; do
   grep -q '^status: running' "$p" 2>/dev/null || continue
-  s="$(basename "$p" .md)"; pidf="loop/state/$s.pid"
+  s="$(basename "$p" .md)"; pidf="$LOOP_STATE/$s.pid"
   pid="$(cat "$pidf" 2>/dev/null)"
   if [ -z "$pid" ] || ! kill -0 "$pid" 2>/dev/null; then
     log "[fleet] '$s' stranded in 'running' (worker dead) — resetting to ready"
@@ -50,9 +51,9 @@ fi
 # merge by hand afterward. Merges inside integrate.sh are serialized via a lock, so
 # parallel workers are safe in either mode.
 if [ "${AUTO_INTEGRATE:-0}" = "1" ]; then
-  worker="loop/integrate.sh"; mode="closed loop (verify+merge+self-correct)"
+  worker="$LOOP_HOME/lib/integrate.sh"; mode="closed loop (verify+merge+self-correct)"
 else
-  worker="loop/run-plan.sh";  mode="executor only (manual verify+merge)"
+  worker="$LOOP_HOME/lib/run-plan.sh";  mode="executor only (manual verify+merge)"
 fi
 
 log "dispatching $(echo "$ready" | wc -l | tr -d ' ') plan(s), -P ${MAX_PARALLEL:-3}, mode: $mode"
@@ -66,5 +67,5 @@ if [ "${AUTO_INTEGRATE:-0}" = "1" ]; then
   log "blocked:       ls plans/*.blocked.md 2>/dev/null"
 else
   log "branches:  git branch --list 'loop/*'"
-  log "verify:    ./loop/verify.sh plans/<plan>.md"
+  log "verify:    loop verify plans/<plan>.md"
 fi

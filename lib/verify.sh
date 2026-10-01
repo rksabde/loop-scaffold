@@ -1,20 +1,19 @@
 #!/usr/bin/env bash
-# loop/verify.sh — independent pre-merge audit of a plan's branch.
+# lib/verify.sh — independent pre-merge audit of a plan's branch.
 # Runs the 'verifier' subagent (strong model, read-only) which re-runs
 # each Acceptance check itself rather than trusting the executor.
 #
-#   ./loop/verify.sh plans/002-auth-v2.md
+#   loop verify plans/002-auth-v2.md
 set -uo pipefail
-source "$(dirname "$0")/lib.sh"
-source "$(dirname "$0")/adapters/${LOOP_TOOL:-claude}.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+load_adapter
 
-plan="${1:?usage: verify.sh plans/NNN-name.md}"
+plan="${1:?usage: loop verify plans/NNN-name.md}"
 slug="$(basename "$plan" .md)"
-export LOOP_PLAN_SLUG="$slug"     # attributes loop/logs/calls.jsonl lines to this plan
+export LOOP_PLAN_SLUG="$slug"     # attributes .loop/logs/calls.jsonl lines to this plan
 cd "$SCAFFOLD_ROOT"
-mkdir -p loop/logs
 
-git diff "${BASE_BRANCH:-main}...loop/$slug" > "loop/logs/$slug.diff" 2>/dev/null || true
+git diff "${BASE_BRANCH:-main}...loop/$slug" > "$LOOP_LOGS/$slug.diff" 2>/dev/null || true
 
 # Audit IN a checkout of the branch (detached, so it coexists with the executor's
 # worktree) — acceptance commands then run against the branch's actual state, not main.
@@ -33,7 +32,7 @@ $(cat "$plan")
 
 Run each \`## Acceptance\` check HERE. For scope, judge ONLY the committed diff vs
 ${BASE_BRANCH:-main} (\`git diff ${BASE_BRANCH:-main}...loop/$slug\`, saved at
-$SCAFFOLD_ROOT/loop/logs/$slug.diff) — IGNORE generated/untracked files (e.g. __pycache__,
+$LOOP_LOGS/$slug.diff) — IGNORE generated/untracked files (e.g. __pycache__,
 *.pyc, build output) created by running the checks. Return the JSON verdict.
 PROMPT
 
@@ -42,7 +41,7 @@ PROMPT
 # Edit/Write), and runs in an ephemeral detached worktree, so bypassPermissions lets it
 # EXECUTE checks while still being unable to modify the repo. (Codex: workspace-write
 # already allows running commands.)
-vfile="$SCAFFOLD_ROOT/loop/logs/$slug.verdict.json"
+vfile="$LOOP_LOGS/$slug.verdict.json"
 ( cd "$wt" && PERMISSION_MODE=bypassPermissions CODEX_SANDBOX=workspace-write \
     adapter_run verifier "$prompt" "$vfile" )
 git worktree remove --force "$wt" 2>/dev/null || true
@@ -59,16 +58,16 @@ log "[verify] $slug verdict=$verdict"
 # integrate bookkeeping commit (or the human's merge commit, manual mode) carries them.
 tdir="$SCAFFOLD_ROOT/.transcripts/$slug"; mkdir -p "$tdir"
 nn="$(printf '%02d' $(( $(ls "$tdir"/verify-*-verifier.md 2>/dev/null | wc -l) + 1 )))"
-python3 "$SCAFFOLD_ROOT/loop/transcript.py" "$vfile" --role verifier \
+python3 "$LOOP_HOME/lib/transcript.py" "$vfile" --role verifier \
     --title "$slug — verify $nn (verdict: $verdict)" > "$tdir/verify-$nn-verifier.md" 2>/dev/null \
   || log "[verify] transcript render failed (verdict unaffected)"
-tail -1 "$SCAFFOLD_ROOT/loop/logs/calls.jsonl" 2>/dev/null > "$tdir/meta-$nn.json" || true
+tail -1 "$LOOP_LOGS/calls.jsonl" 2>/dev/null > "$tdir/meta-$nn.json" || true
 [ "${TRANSCRIPT_RAW:-0}" = "1" ] && cp "$vfile" "$tdir/verify-$nn-verifier.raw.json"
 case "$verdict" in
   PASS) exit 0 ;;
   FAIL) python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("result",""))' \
-          "$vfile" 2>/dev/null > "$SCAFFOLD_ROOT/loop/logs/$slug.feedback" || \
-          cp "$vfile" "$SCAFFOLD_ROOT/loop/logs/$slug.feedback"
+          "$vfile" 2>/dev/null > "$LOOP_LOGS/$slug.feedback" || \
+          cp "$vfile" "$LOOP_LOGS/$slug.feedback"
         exit 1 ;;
   *)    exit 2 ;;
 esac

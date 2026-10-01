@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# loop/integrate.sh — the CLOSED loop for ONE plan: execute → verify → act.
+# lib/integrate.sh — the CLOSED loop for ONE plan: execute → verify → act.
 # This is the "integrator" role: it turns the advisory verifier into a decision.
 #
-#   ./loop/integrate.sh plans/001-foo.md
+#   loop integrate plans/001-foo.md
 #
 # Outcomes:
 #   PASS  → merge the branch into BASE_BRANCH, status: done, clean the worktree.
@@ -15,30 +15,29 @@
 # Total executor runs are bounded by (MAX_REPLANS + 1) * MAX_ATTEMPTS.
 #
 # Safety (parallel fleets):
-#   • ALL merges + bookkeeping commits are serialized through loop/state/merge.lock
+#   • ALL merges + bookkeeping commits are serialized through .loop/state/merge.lock
 #     (atomic mkdir; stale locks from dead PIDs are stolen) — xargs -P workers can't
 #     race each other's `git checkout`/`git merge` in the shared main checkout.
 #   • Every outcome is COMMITTED (status flip, PROGRESS, blocked note) — no dirty tree.
 #   • Crash recovery: a trap restores `status: ready` if we die before a terminal
 #     state, and fleet.sh sweeps plans stranded in `running` by a kill -9.
 set -uo pipefail
-source "$(dirname "$0")/lib.sh"
-source "$(dirname "$0")/adapters/${LOOP_TOOL:-claude}.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+load_adapter
 
-plan="${1:?usage: integrate.sh plans/NNN-name.md}"
+plan="${1:?usage: loop integrate plans/NNN-name.md}"
 slug="$(basename "$plan" .md)"
 branch="loop/$slug"
 base="${BASE_BRANCH:-main}"
 cd "$SCAFFOLD_ROOT"
-mkdir -p loop/logs loop/state
 
 ATTEMPTS="${MAX_ATTEMPTS:-2}"
 REPLANS="${MAX_REPLANS:-1}"
-fbfile="loop/logs/$slug.feedback"
+fbfile="$LOOP_LOGS/$slug.feedback"
 rm -f "$fbfile"            # start blind; verify.sh writes this only after a FAIL
 
 # ── merge/bookkeeping mutex (serializes ALL git ops on the shared main checkout) ──
-LOCK="$SCAFFOLD_ROOT/loop/state/merge.lock"
+LOCK="$LOOP_STATE/merge.lock"
 LOCK_WAIT="${MERGE_LOCK_WAIT:-900}"
 
 _lock_acquire() {
@@ -62,7 +61,7 @@ _lock_release() {
 }
 
 # ── crash recovery: never strand a plan in 'running' ─────────────────────────
-PIDFILE="$SCAFFOLD_ROOT/loop/state/$slug.pid"
+PIDFILE="$LOOP_STATE/$slug.pid"
 echo $$ > "$PIDFILE"
 terminal=0
 _cleanup() {
@@ -126,7 +125,7 @@ _block() {
     echo
     echo "## Your move"
     echo "Inspect the branch, fix the plan or the underlying blocker, set \`status: ready\`,"
-    echo "then re-run \`./loop/fleet.sh\` (or \`./loop/integrate.sh $plan\`)."
+    echo "then re-run \`loop fleet\` (or \`loop integrate $plan\`)."
   } > "plans/$slug.blocked.md"
   if _lock_acquire; then
     _bookkeep "bookkeep $slug: blocked" "$plan" "plans/$slug.blocked.md" ".transcripts/$slug"
@@ -152,7 +151,7 @@ $(cat "$plan")
 --- WHY IT FAILED (verifier verdict, last attempt) ---
 $(cat "$fbfile" 2>/dev/null || echo "(no verdict captured)")
 PROMPT
-  LOOP_PLAN_SLUG="$slug" adapter_run planner "$rp" "loop/logs/$slug.replan.json" || true
+  LOOP_PLAN_SLUG="$slug" adapter_run planner "$rp" "$LOOP_LOGS/$slug.replan.json" || true
   rm -f "$fbfile"   # the plan changed; next attempt starts blind against the new plan
 }
 
@@ -164,8 +163,8 @@ while :; do
   attempt=1
   while [ "$attempt" -le "$ATTEMPTS" ]; do
     log "[integrate] $slug — executor attempt $attempt/$ATTEMPTS (plan v$((replan_n + 1)))"
-    ./loop/run-plan.sh "$plan" || true        # verdict, not exit code, decides
-    if ./loop/verify.sh "$plan" >/dev/null 2>&1; then passed=1; break; fi
+    bash "$LOOP_HOME/lib/run-plan.sh" "$plan" || true   # verdict, not exit code, decides
+    if bash "$LOOP_HOME/lib/verify.sh" "$plan" >/dev/null 2>&1; then passed=1; break; fi
     attempt=$((attempt + 1))                  # verify.sh wrote $fbfile; next run consumes it
   done
 

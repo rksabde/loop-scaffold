@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
-# loop/engine.sh — tool-AGNOSTIC engine resolution.
+# lib/engine.sh — tool-AGNOSTIC engine resolution.
 # Maps an agent role -> an engine-chain ("provider:tier|provider:tier|...").
 # The tool-SPECIFIC half (provider -> auth/model/invocation) lives in
-# loop/adapters/<tool>.sh. Sourced by the adapters; never calls a tool itself.
+# adapters/<tool>.sh. Sourced by the adapters; never calls a tool itself.
 #
 # Config (in .env, machine-specific, gitignored):
-#   LOOP_TOOL=claude|codex|opencode        (default: claude)
+#   LOOP_TOOL=claude|codex                 (default: claude)
 #   LOOP_ENGINE_DEFAULT="frontier:high"    (fallback for any unset role)
 #   LOOP_ENGINE_ENGINEER / _RESEARCHER / _VERIFIER / _PLANNER / _INTEGRATOR=...
 # Tiers are canonical high|mid|low; opus|sonnet|haiku are accepted as aliases.
 
-[ -n "${SCAFFOLD_ROOT:-}" ] || source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+[ -n "${_LOOP_LIB_LOADED:-}" ] || source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 # Engine routing (.env) is loaded by lib.sh — early, so LOOP_TOOL is set before an
-# adapter is chosen. (lib.sh is sourced above when SCAFFOLD_ROOT was unset.)
+# adapter is chosen. (lib.sh is sourced above when it was not loaded yet.)
 
 # high|mid|low ; opus|sonnet|haiku aliased; anything else passed through (concrete model).
 engine_norm_tier() {
@@ -51,10 +51,10 @@ engine_split() {
 }
 
 # ── Failover cooldown state (Phase 2) ─────────────────────────────────
-# A provider that hits a rate/usage limit is parked in loop/state/<provider>.cooldown
+# A provider that hits a rate/usage limit is parked in .loop/state/<provider>.cooldown
 # (a blocked-until epoch). The resolver treats a cooling provider as unavailable and
 # falls to the next chain link; it auto-recovers when the timestamp passes.
-ENGINE_STATE_DIR="$SCAFFOLD_ROOT/loop/state"
+ENGINE_STATE_DIR="$LOOP_STATE"
 LOOP_COOLDOWN_MIN="${LOOP_COOLDOWN_MIN:-60}"   # default cooldown when no reset time is known
 
 engine_in_cooldown() {            # provider -> 0 (true) if currently cooling down
@@ -79,7 +79,7 @@ engine_clear_cooldown() { rm -f "$ENGINE_STATE_DIR/$1.cooldown" 2>/dev/null; }  
 
 # ── The ONE engine walk (shared adapter_run) ──────────────────────────
 # The chain-walk (parse → skip unavailable/cooling → invoke → limit-detect →
-# cooldown + failover) lives HERE, once. A tool adapter (loop/adapters/<tool>.sh)
+# cooldown + failover) lives HERE, once. A tool adapter (adapters/<tool>.sh)
 # provides only the tool-specific pieces:
 #   ADAPTER_TOOL                        tool name for logs ("claude", "codex", …)
 #   engine_available <prov>             can this tool use the provider right now?
@@ -93,14 +93,14 @@ engine_clear_cooldown() { rm -f "$ENGINE_STATE_DIR/$1.cooldown" 2>/dev/null; }  
 adapter_retry_after() { grep -oiE 'retry[_-]?after"?[ :=]+[0-9]+' "$1" 2>/dev/null | grep -oE '[0-9]+' | head -1; }
 
 # ── Engine call log ───────────────────────────────────────────────────
-# One JSON line per worker call → loop/logs/calls.jsonl: what was REQUESTED
+# One JSON line per worker call → .loop/logs/calls.jsonl: what was REQUESTED
 # (engine + exec string) and what ACTUALLY answered (model ids from the result log —
 # claude's modelUsage keys are real dated ids; ccr/codex may route to something else
 # than the alias asked for, which is exactly why both sides are recorded).
 # Callers set LOOP_PLAN_SLUG so lines are attributable to a plan.
 # Also exports ENGINE_LAST_MODEL / ENGINE_LAST_COST / ENGINE_LAST_ENGINE for the
 # caller's own bookkeeping (e.g. run-plan.sh's PROGRESS line).
-ENGINE_CALLS_LOG="$SCAFFOLD_ROOT/loop/logs/calls.jsonl"
+ENGINE_CALLS_LOG="$LOOP_LOGS/calls.jsonl"
 
 _engine_call_log() {   # role prov tier exec logfile rc kind(run|dryrun|limited)
   local out
@@ -153,6 +153,7 @@ engine_usable() { engine_in_cooldown "$1" && return 1; engine_available "$1" "$2
 adapter_run() {
   local role prompt logf chain spec prov tier rc OLDIFS
   role="$1"; prompt="$2"; logf="$3"
+  ENGINE_ROLE="$role"     # adapters may vary flags per role (e.g. claude: --bare not for engineer)
   chain="$(engine_chain_for_role "$role")"
 
   OLDIFS="$IFS"; IFS='|'; set -- $chain; IFS="$OLDIFS"

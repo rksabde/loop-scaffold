@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# loop/triage.sh — unattended entrypoint (cron / CI).
+# lib/triage.sh — unattended entrypoint (cron / CI).
 # Default behaviour: just run the fleet over ready plans (CLOSED loop).
 #
 # To make it an OPEN loop, add a discovery step here that WRITES new
@@ -9,7 +9,7 @@
 #   - one plan per TODO/FIXME cluster
 # Then the loop never empties.
 set -uo pipefail
-source "$(dirname "$0")/lib.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 cd "$SCAFFOLD_ROOT"
 
 log "triage start"
@@ -20,9 +20,9 @@ log "triage start"
 # The human gate is the draft→ready promotion: the fleet below runs ONLY 'ready'
 # plans, so freshly-discovered drafts wait for review and never auto-execute.
 if [ "${INTAKE:-1}" = "1" ] && [ -d "$SCAFFOLD_ROOT/inbox" ]; then
-  bash loop/intake.sh
+  bash "$LOOP_HOME/lib/intake.sh"
 fi
 # Other discovery sources (failing CI, labelled issues, TODO clusters) can be added here.
 
-bash loop/fleet.sh   # runs 'status: ready' plans only — drafts wait for promotion
+bash "$LOOP_HOME/lib/fleet.sh"   # runs 'status: ready' plans only — drafts wait for promotion
 log "triage done"
